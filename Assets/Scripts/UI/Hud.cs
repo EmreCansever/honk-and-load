@@ -1,21 +1,26 @@
 using System.Collections.Generic;
+using HonkAndLoad.Core;
 using HonkAndLoad.Gameplay;
+using HonkAndLoad.Level;
 using UnityEngine;
 
 namespace HonkAndLoad.UI
 {
     /// <summary>
-    /// Prototip arayüzü (IMGUI). Aşama 3'te uGUI / UI Toolkit ile değiştirilecek.
+    /// Prototip arayüzü (IMGUI): giriş ekranı, oyun içi üst bar, kazanma / kaybetme panelleri.
+    /// Aşama 3'te uGUI / UI Toolkit ile değiştirilecek.
     /// 1080 px genişliğe göre tasarlanır ve ekrana göre ölçeklenir.
     /// </summary>
     public class Hud : MonoBehaviour
     {
         private const float DesignWidth = 1080f;
+        private const string Version = "v0.1 prototip";
 
         private GameController _game;
         private float _scale = 1f;
-        private GUIStyle _title, _label, _button, _panel;
-        private Texture2D _panelTex, _buttonTex;
+        private bool _confirmReset;
+        private GUIStyle _logo, _subtitle, _title, _label, _small, _button, _secondary, _panel;
+        private readonly List<Texture2D> _textures = new List<Texture2D>();
 
         // Bu karede çizilen arayüz alanları (ekran koordinatı, y aşağıdan yukarı)
         private static readonly List<Rect> HudRects = new List<Rect>();
@@ -28,44 +33,59 @@ namespace HonkAndLoad.UI
             return false;
         }
 
+        // ---------- Stiller ----------
+
         private void EnsureStyles()
         {
             if (_title != null) return;
-            _panelTex = MakeTex(new Color(0f, 0f, 0f, 0.55f));
-            _buttonTex = MakeTex(new Color(0.15f, 0.65f, 0.35f, 1f));
 
-            _title = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 64, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter
-            };
-            _title.normal.textColor = Color.white;
+            _logo = Text(130, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _subtitle = Text(44, FontStyle.Normal, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.9f));
+            _title = Text(64, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _label = Text(40, FontStyle.Normal, TextAnchor.MiddleLeft, Color.white);
+            _small = Text(32, FontStyle.Normal, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.75f));
 
-            _label = new GUIStyle(GUI.skin.label) { fontSize = 40, alignment = TextAnchor.MiddleLeft };
-            _label.normal.textColor = Color.white;
-
-            _button = new GUIStyle(GUI.skin.button) { fontSize = 42, fontStyle = FontStyle.Bold };
-            _button.normal.background = _buttonTex;
-            _button.hover.background = _buttonTex;
-            _button.active.background = _buttonTex;
-            _button.normal.textColor = Color.white;
-            _button.hover.textColor = Color.white;
-            _button.active.textColor = new Color(0.85f, 1f, 0.9f);
+            _button = ButtonStyle(new Color(0.15f, 0.65f, 0.35f), 46);
+            _secondary = ButtonStyle(new Color(0.20f, 0.30f, 0.45f, 0.85f), 38);
 
             _panel = new GUIStyle(GUI.skin.box);
-            _panel.normal.background = _panelTex;
+            _panel.normal.background = Tex(new Color(0f, 0f, 0f, 0.55f));
         }
 
-        private static Texture2D MakeTex(Color c)
+        private static GUIStyle Text(int size, FontStyle style, TextAnchor anchor, Color color)
+        {
+            var s = new GUIStyle(GUI.skin.label) { fontSize = size, fontStyle = style, alignment = anchor, wordWrap = true };
+            s.normal.textColor = color;
+            return s;
+        }
+
+        private GUIStyle ButtonStyle(Color color, int size)
+        {
+            var s = new GUIStyle(GUI.skin.button) { fontSize = size, fontStyle = FontStyle.Bold };
+            Texture2D tex = Tex(color);
+            s.normal.background = tex;
+            s.hover.background = tex;
+            s.active.background = Tex(Color.Lerp(color, Color.black, 0.2f));
+            s.normal.textColor = Color.white;
+            s.hover.textColor = Color.white;
+            s.active.textColor = Color.white;
+            return s;
+        }
+
+        private Texture2D Tex(Color c)
         {
             var t = new Texture2D(1, 1);
             t.SetPixel(0, 0, c);
             t.Apply();
+            _textures.Add(t);
             return t;
         }
 
+        // ---------- Çizim ----------
+
         private void OnGUI()
         {
-            if (_game == null || _game.State == null) return;
+            if (_game == null) return;
             EnsureStyles();
             if (Event.current.type == EventType.Layout) HudRects.Clear();
 
@@ -74,39 +94,109 @@ namespace HonkAndLoad.UI
             float w = DesignWidth;
             float h = Screen.height / _scale;
 
-            // Üst bar
-            Rect top = new Rect(0, 0, w, 120);
-            GUI.Box(top, GUIContent.none, _panel);
-            GUI.Label(new Rect(40, 20, 500, 80), $"Bölüm {_game.LevelNumber}", _label);
-            BoardState s = _game.State;
-            int left = s.TotalTrucks - s.DepartedTrucks;
-            GUI.Label(new Rect(w / 2 - 140, 20, 400, 80), $"Kamyon: {left}", _label);
-            Track(top);
-
-            Rect restart = new Rect(w - 260, 20, 220, 80);
-            if (GUI.Button(restart, "Baştan", _button)) _game.RestartLevel();
-
-            // Raf doluluk bilgisi
-            int used = s.BufferUsed();
-            if (_game.CurrentPhase == GameController.Phase.Playing && used >= s.Buffer.Length - 1)
+            if (_game.CurrentPhase == GameController.Phase.Menu)
             {
-                GUI.Label(new Rect(40, 130, w - 80, 60), "Raf dolmak üzere!", _label);
+                DrawMenu(w, h);
+                return;
             }
+            if (_game.State == null) return;
 
+            DrawTopBar(w);
             if (_game.CurrentPhase == GameController.Phase.Won) DrawWin(w, h);
             else if (_game.CurrentPhase == GameController.Phase.Lost) DrawLose(w, h);
         }
 
+        private void DrawMenu(float w, float h)
+        {
+            Track(new Rect(0, 0, w, h));
+
+            float y = h * 0.16f;
+            GUI.Label(new Rect(0, y, w, 160), "Honk & Load!", _logo);
+            GUI.Label(new Rect(60, y + 170, w - 120, 70), "Kolileri yükle, kamyonları yolla!", _subtitle);
+
+            // Basit bir "logo": renkli koli sırası
+            float boxSize = 70f, gap = 18f;
+            float rowWidth = 5 * boxSize + 4 * gap;
+            Color old = GUI.color;
+            for (int i = 0; i < 5; i++)
+            {
+                GUI.color = Palette.Crate(i);
+                GUI.DrawTexture(new Rect((w - rowWidth) / 2 + i * (boxSize + gap), y + 280, boxSize, boxSize), Texture2D.whiteTexture);
+            }
+            GUI.color = old;
+
+            float bw = w - 240, bx = 120;
+            float by = h * 0.55f;
+            if (GUI.Button(new Rect(bx, by, bw, 160), $"Oyna  ·  Bölüm {Progress.CurrentLevel}", _button))
+            {
+                _confirmReset = false;
+                _game.Play();
+            }
+
+            by += 200;
+            if (GUI.Button(new Rect(bx, by, bw / 2 - 12, 110), Progress.SoundOn ? "Ses: Açık" : "Ses: Kapalı", _secondary))
+            {
+                Progress.SoundOn = !Progress.SoundOn;
+                _game.ApplySettings();
+            }
+            if (GUI.Button(new Rect(bx + bw / 2 + 12, by, bw / 2 - 12, 110), Progress.HapticsOn ? "Titreşim: Açık" : "Titreşim: Kapalı", _secondary))
+            {
+                Progress.HapticsOn = !Progress.HapticsOn;
+                _game.ApplySettings();
+            }
+
+            by += 150;
+            if (Progress.CurrentLevel > 1)
+            {
+                string text = _confirmReset ? "Emin misin? Tekrar dokun" : "İlerlemeyi sıfırla";
+                if (GUI.Button(new Rect(bx + bw / 4, by, bw / 2, 90), text, _secondary))
+                {
+                    if (_confirmReset) { Progress.ResetLevels(); _confirmReset = false; }
+                    else _confirmReset = true;
+                }
+            }
+
+            GUI.Label(new Rect(0, h - 90, w, 60), Version, _small);
+        }
+
+        private void DrawTopBar(float w)
+        {
+            Rect top = new Rect(0, 0, w, 120);
+            GUI.Box(top, GUIContent.none, _panel);
+            Track(top);
+
+            BoardState s = _game.State;
+            GUI.Label(new Rect(40, 20, 260, 80), $"Bölüm {_game.LevelNumber}", _label);
+            GUI.Label(new Rect(300, 20, 300, 80), $"Kamyon: {s.TotalTrucks - s.DepartedTrucks}", _label);
+
+            if (GUI.Button(new Rect(w - 480, 20, 200, 80), "Menü", _secondary)) _game.ShowMenu();
+            if (_game.State != null && GUI.Button(new Rect(w - 260, 20, 220, 80), "Baştan", _button)) _game.RestartLevel();
+
+            if (_game.State != null && _game.CurrentPhase == GameController.Phase.Playing
+                && _game.State.BufferUsed() >= _game.State.Buffer.Length - 1)
+            {
+                GUI.Label(new Rect(40, 130, w - 80, 60), "Raf dolmak üzere!", _label);
+            }
+        }
+
         private void DrawWin(float w, float h)
         {
-            Rect panel = new Rect(90, h / 2 - 260, w - 180, 520);
+            Rect panel = new Rect(90, h / 2 - 300, w - 180, 600);
             GUI.Box(panel, GUIContent.none, _panel);
             Track(panel);
-            GUI.Label(new Rect(panel.x, panel.y + 60, panel.width, 100), "Teslimat tamam!", _title);
-            GUI.Label(new Rect(panel.x + 60, panel.y + 180, panel.width - 120, 80),
+            GUI.Label(new Rect(panel.x, panel.y + 50, panel.width, 100), "Teslimat tamam!", _title);
+            GUI.Label(new Rect(panel.x + 60, panel.y + 160, panel.width - 120, 80),
                 $"{_game.Moves} hamlede bitirdin", _label);
-            if (GUI.Button(new Rect(panel.x + 100, panel.y + 330, panel.width - 200, 120), "Sonraki Bölüm", _button))
+
+            int nextSlots = LevelGenerator.BufferSizeFor(_game.LevelNumber + 1);
+            if (nextSlots > LevelGenerator.BufferSizeFor(_game.LevelNumber))
+                GUI.Label(new Rect(panel.x + 60, panel.y + 230, panel.width - 120, 80),
+                    $"Yeni raf slotu açıldı! Artık {nextSlots} slot.", _label);
+
+            if (GUI.Button(new Rect(panel.x + 100, panel.y + 340, panel.width - 200, 120), "Sonraki Bölüm", _button))
                 _game.NextLevel();
+            if (GUI.Button(new Rect(panel.x + 200, panel.y + 480, panel.width - 400, 80), "Menü", _secondary))
+                _game.ShowMenu();
         }
 
         private void DrawLose(float w, float h)
@@ -142,8 +232,7 @@ namespace HonkAndLoad.UI
         private void OnDestroy()
         {
             HudRects.Clear();
-            if (_panelTex != null) Destroy(_panelTex);
-            if (_buttonTex != null) Destroy(_buttonTex);
+            foreach (Texture2D t in _textures) if (t != null) Destroy(t);
         }
     }
 }

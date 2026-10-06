@@ -15,7 +15,7 @@ namespace HonkAndLoad.Gameplay
     /// </summary>
     public class GameController : MonoBehaviour
     {
-        public enum Phase { Playing, Won, Lost }
+        public enum Phase { Menu, Playing, Won, Lost }
 
         public const int ExtraSlotsReward = 3;
 
@@ -41,7 +41,31 @@ namespace HonkAndLoad.Gameplay
             gameObject.AddComponent<Hud>().Init(this);
         }
 
-        private void Start() => StartLevel(Progress.CurrentLevel);
+        private void Start()
+        {
+            ApplySettings();
+            ShowMenu();
+        }
+
+        // ---------- Menü ----------
+
+        /// <summary>Giriş ekranına dön. Oyun alanı temizlenir.</summary>
+        public void ShowMenu()
+        {
+            StopAllCoroutines();
+            _view.Clear();
+            State = null;
+            CurrentPhase = Phase.Menu;
+        }
+
+        /// <summary>Giriş ekranındaki "Oyna" butonu.</summary>
+        public void Play() => StartLevel(Progress.CurrentLevel);
+
+        public void ApplySettings()
+        {
+            AudioListener.volume = Progress.SoundOn ? 1f : 0f;
+            _feedback.HapticsEnabled = Progress.HapticsOn;
+        }
 
         // ---------- Bölüm akışı ----------
 
@@ -64,11 +88,7 @@ namespace HonkAndLoad.Gameplay
             FitCamera();
         }
 
-        public void NextLevel()
-        {
-            Progress.CurrentLevel = LevelNumber + 1;
-            StartLevel(LevelNumber + 1);
-        }
+        public void NextLevel() => StartLevel(LevelNumber + 1);
 
         /// <summary>Kayıp ekranındaki "+3 slot" (ileride ödüllü reklamdan sonra çağrılacak).</summary>
         public void GrantExtraSlots()
@@ -85,6 +105,10 @@ namespace HonkAndLoad.Gameplay
 
         private void Update()
         {
+#if ENABLE_LEGACY_INPUT_MANAGER
+            // Android geri tuşu / Escape: oyundan giriş ekranına dön
+            if (CurrentPhase != Phase.Menu && Input.GetKeyDown(KeyCode.Escape)) { ShowMenu(); return; }
+#endif
             if (CurrentPhase != Phase.Playing) return;
             if (!TryGetTap(out Vector2 screenPos)) return;
             if (Hud.IsPointerOverHud(screenPos)) return;
@@ -151,6 +175,7 @@ namespace HonkAndLoad.Gameplay
             if (State.IsWon())
             {
                 CurrentPhase = Phase.Won;
+                Progress.CurrentLevel = LevelNumber + 1; // ilerleme hemen kaydedilir
                 StartCoroutine(Delayed(0.6f, _feedback.Win));
             }
             else if (State.IsStuck())

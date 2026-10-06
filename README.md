@@ -14,12 +14,13 @@ Renkli kolileri doğru kamyona yükleyip sıkışan depoyu boşalttığın, tek 
 3. Kamyon dolunca düdük çalıp gider ve sıradaki kamyon gelir.
 4. Raftaki bir koliye dokunarak onu uygun kamyona yükleyebilirsin.
 5. **Kazanma:** Tüm koliler yüklendi. **Kaybetme:** Raf doldu ve yapılacak hamle kalmadı.
+6. Raf 5 slotla başlar, her 15 bölümde bir slot artar (en fazla 8).
 
 ## Projeyi açma
 
 1. Unity Hub → **Add → Add project from disk** → bu klasörü seç.
 2. Unity 6 (veya 2022.3 LTS) sürümüyle aç. İlk açılışta Unity `Library/`, `Packages/` ve `ProjectSettings/` klasörlerini kendisi oluşturur.
-3. Boş bir sahnede **Play**'e bas. Oyun, `GameBootstrap` sayesinde sahneyi kendisi kurar; sahneye bir şey eklemen gerekmez.
+3. Boş bir sahnede **Play**'e bas. Oyun, `GameBootstrap` sayesinde sahneyi kendisi kurar; giriş ekranı açılır, **Oyna** ile kaldığın bölümden devam edersin.
 4. Android için: **File → Build Settings → Android → Switch Platform**.
 
 ## Klasör yapısı

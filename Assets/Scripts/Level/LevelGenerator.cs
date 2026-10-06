@@ -15,11 +15,14 @@ namespace HonkAndLoad.Level
     public static class LevelGenerator
     {
         public const int MaxColors = 8;
+        public const int BaseBufferSize = 5;
+        public const int MaxBufferSize = 8;
+        public const int LevelsPerExtraSlot = 15;
 
         /// <summary>
         /// Oyun bu "sanal bölüm" zorluğundan başlar. Büyüttükçe ilk bölümler zorlaşır.
         /// </summary>
-        public const int StartOffset = 12;
+        public const int StartOffset = 9;
 
         public struct Settings
         {
@@ -48,14 +51,14 @@ namespace HonkAndLoad.Level
             int colors = Math.Min(MaxColors, 3 + (e - 1) / 6);
             int trucksPerColor = Math.Min(3, 1 + (e - 1) / 10);
 
-            float noise = Math.Min(30f, 12f + e * 0.6f);
-            if (hard) noise *= 1.4f;
+            float noise = Math.Min(28f, 10f + e * 0.55f);
+            if (hard) noise *= 1.3f;
             if (relief) noise *= 0.7f;
 
-            float target = Math.Max(0.3f, 0.65f - 0.012f * n);
+            float target = Math.Max(0.4f, 0.8f - 0.01f * n);
             if (hard) target -= 0.2f;
-            if (relief) target += 0.2f;
-            target = Math.Min(0.9f, Math.Max(0.15f, target));
+            if (relief) target += 0.15f;
+            target = Math.Min(0.95f, Math.Max(0.2f, target));
 
             return new Settings
             {
@@ -63,12 +66,16 @@ namespace HonkAndLoad.Level
                 TrucksPerColor = trucksPerColor,
                 Columns = colors + (e > 30 ? 1 : 0),
                 TruckCapacity = 3,
-                BufferSize = 5,
+                BufferSize = BufferSizeFor(n),
                 DockCount = 3,
                 Noise = noise,
                 TargetWinRate = target
             };
         }
+
+        /// <summary>Raf 5 slotla başlar, her 15 bölümde bir slot artar (en fazla 8).</summary>
+        public static int BufferSizeFor(int levelNumber) =>
+            Math.Min(MaxBufferSize, BaseBufferSize + (Math.Max(1, levelNumber) - 1) / LevelsPerExtraSlot);
 
         public static LevelData Generate(int levelNumber, int candidates = 10)
         {
