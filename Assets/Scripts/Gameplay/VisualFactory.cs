@@ -87,10 +87,11 @@ namespace HonkAndLoad.Gameplay
             if (info == null || info.Dimmed == dimmed) return;
             info.Dimmed = dimmed;
             Color c = Palette.Crate(info.Color);
-            Paint(crate.gameObject, dimmed ? Color.Lerp(c, Palette.Ground, 0.45f) : c);
+            // Rengi beyaza değil koyuya doğru kaydır: ton korunur, renkler karışmaz
+            Paint(crate.gameObject, dimmed ? Color.Lerp(c, new Color(0.25f, 0.25f, 0.3f), 0.3f) : c);
             Transform symbol = crate.Find("Symbol");
             if (symbol != null)
-                symbol.GetComponent<SpriteRenderer>().color = new Color(1f, 1f, 1f, dimmed ? 0.45f : 0.92f);
+                symbol.GetComponent<SpriteRenderer>().color = new Color(1f, 1f, 1f, dimmed ? 0.6f : 0.92f);
         }
 
         // ---------- Kamyon ----------

@@ -204,7 +204,7 @@ namespace HonkAndLoad.Gameplay
             _camera.orthographic = true;
             _camera.clearFlags = CameraClearFlags.SolidColor;
             _camera.backgroundColor = Palette.Background;
-            _camera.transform.rotation = Quaternion.Euler(58f, 0f, 0f);
+            _camera.transform.rotation = Quaternion.Euler(48f, 0f, 0f);
             _camera.nearClipPlane = 0.1f;
             _camera.farClipPlane = 100f;
         }
@@ -236,16 +236,24 @@ namespace HonkAndLoad.Gameplay
                 minU = Mathf.Min(minU, u); maxU = Mathf.Max(maxU, u);
             }
 
-            // Üstte ve altta arayüz için pay bırak
-            const float topMargin = 1.6f, bottomMargin = 1.4f, sideMargin = 0.4f;
-            maxU += topMargin; minU -= bottomMargin;
+            const float sideMargin = 0.3f, edgeMargin = 0.4f;
             minR -= sideMargin; maxR += sideMargin;
+            minU -= edgeMargin; maxU += edgeMargin;
+
+            // Ekranın üstü arayüze (ve çentiğe), altı güvenli alana ayrılır;
+            // oyun alanı kalan banda sığdırılır.
+            float topFrac = Mathf.Clamp(Hud.TopReservedPixels() / Screen.height, 0f, 0.4f);
+            float bottomFrac = Mathf.Clamp(Screen.safeArea.y / Screen.height + 0.02f, 0f, 0.2f);
+            float band = 1f - topFrac - bottomFrac;
 
             float halfHeight = (maxU - minU) / 2f;
             float halfWidth = (maxR - minR) / 2f;
-            _camera.orthographicSize = Mathf.Max(halfHeight, halfWidth / _camera.aspect);
+            float size = Mathf.Max(halfHeight / band, halfWidth / _camera.aspect);
+            _camera.orthographicSize = size;
 
-            Vector3 center = right * ((minR + maxR) / 2f) + up * ((minU + maxU) / 2f);
+            // İçeriğin ortası bandın ortasına gelsin
+            float centerU = (minU + maxU) / 2f + (topFrac - bottomFrac) * size;
+            Vector3 center = right * ((minR + maxR) / 2f) + up * centerU;
             cam.position = center - cam.forward * 30f;
         }
 

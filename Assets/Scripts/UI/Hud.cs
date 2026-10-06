@@ -27,6 +27,20 @@ namespace HonkAndLoad.UI
 
         public void Init(GameController game) => _game = game;
 
+        /// <summary>Üst barın tasarım yüksekliği (1080 genişliğe göre).</summary>
+        public const float TopBarHeight = 140f;
+
+        /// <summary>Çentik / ön kamera nedeniyle ekranın üstünde kullanılamayan piksel.</summary>
+        public static float SafeTopInsetPixels() =>
+            Mathf.Max(0f, Screen.height - (Screen.safeArea.y + Screen.safeArea.height));
+
+        /// <summary>Kameranın oyun alanını yerleştirmemesi gereken üst bölge (piksel).</summary>
+        public static float TopReservedPixels()
+        {
+            float scale = Screen.width / DesignWidth;
+            return SafeTopInsetPixels() + (TopBarHeight + 90f) * scale; // bar + "Raf dolmak üzere" yazısı
+        }
+
         public static bool IsPointerOverHud(Vector2 screenPos)
         {
             foreach (Rect r in HudRects) if (r.Contains(screenPos)) return true;
@@ -42,7 +56,7 @@ namespace HonkAndLoad.UI
             _logo = Text(130, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
             _subtitle = Text(44, FontStyle.Normal, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.9f));
             _title = Text(64, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
-            _label = Text(40, FontStyle.Normal, TextAnchor.MiddleLeft, Color.white);
+            _label = Text(44, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
             _small = Text(32, FontStyle.Normal, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.75f));
 
             _button = ButtonStyle(new Color(0.15f, 0.65f, 0.35f), 46);
@@ -101,7 +115,7 @@ namespace HonkAndLoad.UI
             }
             if (_game.State == null) return;
 
-            DrawTopBar(w);
+            DrawTopBar(w, SafeTopInsetPixels() / _scale);
             if (_game.CurrentPhase == GameController.Phase.Won) DrawWin(w, h);
             else if (_game.CurrentPhase == GameController.Phase.Lost) DrawLose(w, h);
         }
@@ -159,23 +173,25 @@ namespace HonkAndLoad.UI
             GUI.Label(new Rect(0, h - 90, w, 60), Version, _small);
         }
 
-        private void DrawTopBar(float w)
+        private void DrawTopBar(float w, float inset)
         {
-            Rect top = new Rect(0, 0, w, 120);
+            // Bar çentiğin arkasına kadar uzanır; içerik çentiğin altından başlar
+            Rect top = new Rect(0, 0, w, inset + TopBarHeight);
             GUI.Box(top, GUIContent.none, _panel);
             Track(top);
 
+            float y = inset + 25f;
             BoardState s = _game.State;
-            GUI.Label(new Rect(40, 20, 260, 80), $"Bölüm {_game.LevelNumber}", _label);
-            GUI.Label(new Rect(300, 20, 300, 80), $"Kamyon: {s.TotalTrucks - s.DepartedTrucks}", _label);
+            GUI.Label(new Rect(40, y, 260, 90), $"Bölüm {_game.LevelNumber}", _label);
+            GUI.Label(new Rect(290, y, 300, 90), $"Kamyon: {s.TotalTrucks - s.DepartedTrucks}", _label);
 
-            if (GUI.Button(new Rect(w - 480, 20, 200, 80), "Menü", _secondary)) _game.ShowMenu();
-            if (_game.State != null && GUI.Button(new Rect(w - 260, 20, 220, 80), "Baştan", _button)) _game.RestartLevel();
+            if (GUI.Button(new Rect(w - 490, y, 210, 90), "Menü", _secondary)) _game.ShowMenu();
+            if (_game.State != null && GUI.Button(new Rect(w - 260, y, 220, 90), "Baştan", _button)) _game.RestartLevel();
 
             if (_game.State != null && _game.CurrentPhase == GameController.Phase.Playing
                 && _game.State.BufferUsed() >= _game.State.Buffer.Length - 1)
             {
-                GUI.Label(new Rect(40, 130, w - 80, 60), "Raf dolmak üzere!", _label);
+                GUI.Label(new Rect(40, inset + TopBarHeight + 10, w - 80, 70), "Raf dolmak üzere!", _label);
             }
         }
 
