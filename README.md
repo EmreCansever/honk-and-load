@@ -53,7 +53,8 @@ docs/
 - `trucks`: Kamyonların geliş sırası (renk numaraları). İlk 3 kamyon rampalara yanaşır.
 - `columns[].crates`: Her sütundaki koliler; **son eleman en öndeki** (alınabilir) kolidir.
 - Her renk için koli sayısı = o renkteki kamyon sayısı × `truckCapacity` olmalı.
-- `Resources/Levels` içinde dosya yoksa bölüm otomatik üretilir.
+- `Resources/Levels` içinde dosya yoksa bölüm otomatik üretilir. Şu an yalnızca 1. bölüm (öğretici) elle tasarlandı.
+- Başlangıç zorluğu `LevelGenerator.StartOffset` ile ayarlanır (büyüdükçe ilk bölümler zorlaşır).
 
 ## Yol haritası
 

@@ -16,6 +16,11 @@ namespace HonkAndLoad.Level
     {
         public const int MaxColors = 8;
 
+        /// <summary>
+        /// Oyun bu "sanal bölüm" zorluğundan başlar. Büyüttükçe ilk bölümler zorlaşır.
+        /// </summary>
+        public const int StartOffset = 12;
+
         public struct Settings
         {
             public int Colors;
@@ -26,55 +31,63 @@ namespace HonkAndLoad.Level
             public int DockCount;
             /// <summary>Sıralamanın ne kadar bozulacağı (koli sayısı cinsinden).</summary>
             public float Noise;
-            /// <summary>0 = en kolay aday, 1 = en zor aday.</summary>
-            public float Difficulty;
+            /// <summary>
+            /// Hedeflenen "rastgele oyuncu" kazanma oranı. Adaylar arasından buna en yakın
+            /// olan seçilir. Düşük = zor. Gerçek oyuncular plan yaptığı için bundan iyi oynar.
+            /// </summary>
+            public float TargetWinRate;
         }
 
         public static Settings SettingsFor(int levelNumber)
         {
             int n = Math.Max(1, levelNumber);
-            int colors = Math.Min(MaxColors, 3 + (n - 1) / 6);
-            int trucksPerColor = Math.Min(3, 1 + (n - 1) / 10);
+            int e = n + StartOffset; // efektif zorluk
             bool hard = n % 5 == 0;
             bool relief = n % 5 == 1 && n > 1;
 
-            float noise = n <= 3 ? 1.5f : Math.Min(24f, 3f + n * 0.4f);
+            int colors = Math.Min(MaxColors, 3 + (e - 1) / 6);
+            int trucksPerColor = Math.Min(3, 1 + (e - 1) / 10);
+
+            float noise = Math.Min(30f, 12f + e * 0.6f);
             if (hard) noise *= 1.4f;
-            if (relief) noise *= 0.6f;
+            if (relief) noise *= 0.7f;
+
+            float target = Math.Max(0.3f, 0.65f - 0.012f * n);
+            if (hard) target -= 0.2f;
+            if (relief) target += 0.2f;
+            target = Math.Min(0.9f, Math.Max(0.15f, target));
 
             return new Settings
             {
                 Colors = colors,
                 TrucksPerColor = trucksPerColor,
-                Columns = colors + 1 + (n > 20 ? 1 : 0) + (n > 40 ? 1 : 0),
+                Columns = colors + (e > 30 ? 1 : 0),
                 TruckCapacity = 3,
-                BufferSize = 6,
+                BufferSize = 5,
                 DockCount = 3,
                 Noise = noise,
-                Difficulty = n <= 3 ? 0f : hard ? 1f : relief ? 0.1f : 0.5f
+                TargetWinRate = target
             };
         }
 
-        public static LevelData Generate(int levelNumber, int candidates = 8)
+        public static LevelData Generate(int levelNumber, int candidates = 10)
         {
             Settings s = SettingsFor(levelNumber);
             var rng = new Random(levelNumber * 7919 + 17);
 
-            var solvable = new List<(LevelData data, int peak)>();
-            LevelData fallback = null;
+            LevelData best = null, fallback = null;
+            float bestDistance = float.MaxValue;
             for (int i = 0; i < candidates; i++)
             {
                 LevelData data = BuildRandom(s, rng);
                 fallback ??= data;
-                LevelSolver.Result r = LevelSolver.Solve(data, 5000);
-                if (r.Solvable) solvable.Add((data, r.PeakBuffer));
+                if (!LevelSolver.Solve(data, 5000).Solvable) continue;
+
+                float winRate = LevelSolver.EstimateWinRate(data, 30, levelNumber);
+                float distance = Math.Abs(winRate - s.TargetWinRate);
+                if (distance < bestDistance) { bestDistance = distance; best = data; }
             }
-
-            if (solvable.Count == 0) return fallback; // çok nadir; oyuncu "+3 slot" alabilir
-
-            solvable.Sort((a, b) => a.peak.CompareTo(b.peak));
-            int index = (int)Math.Round(s.Difficulty * (solvable.Count - 1));
-            return solvable[index].data;
+            return best ?? fallback; // çözülebilir aday yoksa (çok nadir) oyuncu "+3 slot" alabilir
         }
 
         private static LevelData BuildRandom(Settings s, Random rng)

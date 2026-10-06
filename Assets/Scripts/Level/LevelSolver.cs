@@ -76,5 +76,31 @@ namespace HonkAndLoad.Level
                 }
             }
         }
+
+        /// <summary>
+        /// Zorluk ölçüsü: doğrudan yüklenebilen koliyi hep yükleyen, yoksa rastgele bir
+        /// sütuna dokunan basit bir oyuncunun kaç denemede kazandığı (0–1).
+        /// </summary>
+        public static float EstimateWinRate(LevelData data, int runs, int seed)
+        {
+            var rng = new System.Random(seed);
+            int wins = 0;
+            var options = new List<int>();
+            for (int run = 0; run < runs; run++)
+            {
+                var state = new BoardState(data);
+                while (true)
+                {
+                    ApplyForcedLoads(state);
+                    if (state.IsWon()) { wins++; break; }
+                    options.Clear();
+                    for (int c = 0; c < state.Columns.Count; c++)
+                        if (state.CanTapColumn(c)) options.Add(c);
+                    if (options.Count == 0) break;
+                    state.TapColumn(options[rng.Next(options.Count)]);
+                }
+            }
+            return runs > 0 ? (float)wins / runs : 0f;
+        }
     }
 }
