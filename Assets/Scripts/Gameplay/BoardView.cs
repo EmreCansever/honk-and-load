@@ -251,6 +251,7 @@ namespace HonkAndLoad.Gameplay
             if (move.TruckDeparted)
             {
                 StartCoroutine(Depart(truck.Root, 0.3f));
+                StartCoroutine(Confetti(DockPosition(move.ToDock) + Vector3.up * 0.8f, move.Color, 18, 0.25f, 1f));
                 _docks[move.ToDock] = null;
                 if (move.ArrivedTruck != null)
                 {
@@ -260,6 +261,105 @@ namespace HonkAndLoad.Gameplay
                     StartMove(arriving.Root, dock, 0.35f, 0f, 0.35f);
                 }
             }
+        }
+
+        // ---------- Konumlar (ipucu ve yazılar için, dünya koordinatı) ----------
+
+        public Vector3 ColumnFrontWorld(int column)
+        {
+            if (_root == null || column < 0 || column >= _columns.Count) return Vector3.zero;
+            return _root.TransformPoint(ColumnSlot(column, 0));
+        }
+
+        public Vector3 BufferWorld(int slot) =>
+            _root == null ? Vector3.zero : _root.TransformPoint(BufferSlot(slot));
+
+        public Vector3 DockWorld(int dock) =>
+            _root == null ? Vector3.zero : _root.TransformPoint(DockPosition(dock) + Vector3.up * 0.8f);
+
+        // ---------- Efektler ----------
+
+        /// <summary>Raf dolmak üzereyken boş slotlar kırmızıya döner.</summary>
+        public void SetBufferWarning(bool on)
+        {
+            Color c = on ? new Color(0.95f, 0.5f, 0.45f) : Palette.Slot;
+            foreach (GameObject plate in _bufferPlates)
+                if (plate != null) _factory.Paint(plate, c);
+        }
+
+        /// <summary>Küçük renkli parçacıklar: kamyon doldu / bölüm bitti.</summary>
+        private IEnumerator Confetti(Vector3 localPos, int color, int count, float delay, float power)
+        {
+            if (delay > 0f) yield return new WaitForSeconds(delay);
+            if (_root == null) yield break;
+            Transform parent = _root;
+            var pieces = new Transform[count];
+            var velocity = new Vector3[count];
+            var spin = new Vector3[count];
+            Color[] colors = { Palette.Crate(color), Color.white, Palette.Warning, Palette.Crate(color + 3) };
+            for (int i = 0; i < count; i++)
+            {
+                GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = "Confetti";
+                Destroy(go.GetComponent<Collider>());
+                go.transform.SetParent(parent, false);
+                go.transform.localPosition = localPos;
+                go.transform.localScale = new Vector3(0.16f, 0.03f, 0.1f);
+                go.transform.localRotation = Random.rotation;
+                _factory.Paint(go, colors[i % colors.Length]);
+                pieces[i] = go.transform;
+                Vector2 dir = Random.insideUnitCircle.normalized * Random.Range(1.5f, 3.5f) * power;
+                velocity[i] = new Vector3(dir.x, Random.Range(4f, 7f) * power, dir.y);
+                spin[i] = Random.insideUnitSphere * 720f;
+            }
+
+            const float life = 1.1f;
+            float t = 0f;
+            while (t < life)
+            {
+                float dt = Time.deltaTime;
+                t += dt;
+                for (int i = 0; i < count; i++)
+                {
+                    if (pieces[i] == null) continue;
+                    velocity[i] += Vector3.down * 14f * dt;
+                    velocity[i] *= 1f - 1.5f * dt; // hava direnci
+                    pieces[i].localPosition += velocity[i] * dt;
+                    pieces[i].Rotate(spin[i] * dt);
+                    if (t > life * 0.6f) pieces[i].localScale *= 1f - 4f * dt;
+                }
+                yield return null;
+            }
+            foreach (Transform p in pieces) if (p != null) Destroy(p.gameObject);
+        }
+
+        /// <summary>Bölüm sonu: renkli kamyonlar konvoy halinde rampanın önünden geçer.</summary>
+        public void PlayWinCelebration(int[] colors)
+        {
+            if (_root == null) return;
+            for (int i = 0; i < colors.Length; i++)
+                StartCoroutine(ConvoyTruck(colors[i], i * 0.35f));
+            StartCoroutine(Confetti(new Vector3(0f, 1f, BufferZ + 1f), colors.Length > 0 ? colors[0] : 0, 40, 0.1f, 1.4f));
+        }
+
+        private IEnumerator ConvoyTruck(int color, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (_root == null) yield break;
+            float laneZ = DockZ + 0.3f;
+            VisualFactory.TruckParts parts = _factory.CreateTruck(color, _state.TruckCapacity, _root, new Vector3(-14f, 0f, laneZ));
+            Transform truck = parts.Root;
+            truck.localRotation = Quaternion.Euler(0f, 90f, 0f); // +x yönüne sürer
+            float t = 0f;
+            const float duration = 2.2f;
+            while (t < duration && truck != null)
+            {
+                t += Time.deltaTime;
+                float k = t / duration;
+                truck.localPosition = new Vector3(Mathf.Lerp(-14f, 14f, k), Mathf.Abs(Mathf.Sin(t * 18f)) * 0.04f, laneZ);
+                yield return null;
+            }
+            if (truck != null) Destroy(truck.gameObject);
         }
 
         /// <summary>Bir nesnenin süren hareketini durdurup yenisini başlatır.</summary>

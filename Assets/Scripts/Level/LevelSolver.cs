@@ -19,12 +19,20 @@ namespace HonkAndLoad.Level
             public int PeakBuffer;
         }
 
+        /// <summary>Oyunun o anki durumundan çözüm var mı? (ipucu için)</summary>
+        public static bool IsSolvableFrom(BoardState state, int nodeLimit = 3000)
+        {
+            var visited = new HashSet<string>();
+            var result = new Result { PeakBuffer = int.MaxValue };
+            Search(state.Clone(), 0, visited, ref result, nodeLimit);
+            return result.Solvable;
+        }
+
         public static Result Solve(LevelData data, int nodeLimit = 50000)
         {
             var visited = new HashSet<string>();
             var result = new Result { PeakBuffer = int.MaxValue };
-            var start = new BoardState(data);
-            Search(start, 0, visited, ref result, nodeLimit);
+            Search(new BoardState(data), 0, visited, ref result, nodeLimit);
             if (!result.Solvable) result.PeakBuffer = 0;
             return result;
         }

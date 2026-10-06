@@ -25,6 +25,28 @@ namespace HonkAndLoad.Gameplay
         public bool ExtraSlotsUsed { get; private set; }
         public int Moves { get; private set; }
 
+        /// <summary>Son aşama değişikliğinden bu yana geçen süre (kazanma paneli gecikmesi için).</summary>
+        public float PhaseTime { get; private set; }
+
+        // İpucu / öğretici
+        public bool IsTutorial => LevelNumber == 1 && !Progress.TutorialDone;
+        public const float IdleHintSeconds = 7f;
+        public bool HintVisible => CurrentPhase == Phase.Playing && _hint.Valid && (IsTutorial || _idle > IdleHintSeconds);
+        public Vector3 HintWorld => !_hint.Valid ? Vector3.zero
+            : _hint.Kind == Tappable.TapKind.Column ? _view.ColumnFrontWorld(_hint.Index) : _view.BufferWorld(_hint.Index);
+        public string HintText => IsTutorial && _hint.Valid ? _hint.Text : null;
+
+        private struct Hint
+        {
+            public bool Valid;
+            public Tappable.TapKind Kind;
+            public int Index;
+            public string Text;
+        }
+
+        private Hint _hint;
+        private float _idle;
+        private Hud _hud;
         private BoardView _view;
         private Feedback _feedback;
         private Camera _camera;
@@ -38,7 +60,8 @@ namespace HonkAndLoad.Gameplay
             _view = new GameObject("BoardView").AddComponent<BoardView>();
             _view.transform.SetParent(transform, false);
             _feedback = gameObject.AddComponent<Feedback>();
-            gameObject.AddComponent<Hud>().Init(this);
+            _hud = gameObject.AddComponent<Hud>();
+            _hud.Init(this);
         }
 
         private void Start()
@@ -55,7 +78,7 @@ namespace HonkAndLoad.Gameplay
             StopAllCoroutines();
             _view.Clear();
             State = null;
-            CurrentPhase = Phase.Menu;
+            SetPhase(Phase.Menu);
         }
 
         /// <summary>Giriş ekranındaki "Oyna" butonu.</summary>
@@ -80,11 +103,14 @@ namespace HonkAndLoad.Gameplay
         {
             StopAllCoroutines();
             State = new BoardState(_levelData);
-            CurrentPhase = Phase.Playing;
+            SetPhase(Phase.Playing);
             ExtraSlotsUsed = false;
             Moves = 0;
+            _idle = 0f;
             _feedback.ResetCombo();
             _view.Build(State);
+            _view.SetBufferWarning(false);
+            UpdateHint();
             FitCamera();
         }
 
@@ -97,14 +123,24 @@ namespace HonkAndLoad.Gameplay
             ExtraSlotsUsed = true;
             State.AddBufferSlots(ExtraSlotsReward);
             _view.RebuildBuffer();
+            _view.SetBufferWarning(false);
             FitCamera();
-            CurrentPhase = Phase.Playing;
+            SetPhase(Phase.Playing);
+            UpdateHint();
         }
 
         // ---------- Girdi ----------
 
+        private void SetPhase(Phase phase)
+        {
+            CurrentPhase = phase;
+            PhaseTime = 0f;
+        }
+
         private void Update()
         {
+            PhaseTime += Time.deltaTime;
+            if (CurrentPhase == Phase.Playing) _idle += Time.deltaTime;
 #if ENABLE_LEGACY_INPUT_MANAGER
             // Android geri tuşu / Escape: oyundan giriş ekranına dön
             if (CurrentPhase != Phase.Menu && Input.GetKeyDown(KeyCode.Escape)) { ShowMenu(); return; }
@@ -118,6 +154,7 @@ namespace HonkAndLoad.Gameplay
             var tappable = hit.collider.GetComponent<Tappable>();
             if (tappable == null) return;
 
+            _idle = 0f;
             if (tappable.Kind == Tappable.TapKind.Column) HandleColumnTap(tappable.Index);
             else HandleBufferTap(tappable.Index);
         }
@@ -169,19 +206,98 @@ namespace HonkAndLoad.Gameplay
         {
             Moves++;
             _view.Apply(move);
-            if (move.ToDock >= 0) _feedback.Load(); else _feedback.ToBuffer();
-            if (move.TruckDeparted) StartCoroutine(Delayed(0.3f, _feedback.TruckDeparts));
+            if (move.ToDock >= 0)
+            {
+                _feedback.Load();
+                int combo = _feedback.Combo;
+                if (combo >= 3)
+                    _hud.Popup($"x{combo} Kombo!", _view.DockWorld(move.ToDock), Palette.Warning, 0f);
+            }
+            else _feedback.ToBuffer();
+
+            if (move.TruckDeparted)
+            {
+                StartCoroutine(Delayed(0.3f, _feedback.TruckDeparts));
+                _hud.Popup("Teslim!", _view.DockWorld(move.ToDock), Color.white, 0.25f);
+            }
+
+            _view.SetBufferWarning(State.BufferUsed() >= State.Buffer.Length - 1);
 
             if (State.IsWon())
             {
-                CurrentPhase = Phase.Won;
+                SetPhase(Phase.Won);
                 Progress.CurrentLevel = LevelNumber + 1; // ilerleme hemen kaydedilir
+                if (LevelNumber == 1) Progress.TutorialDone = true;
                 StartCoroutine(Delayed(0.6f, _feedback.Win));
+                _view.PlayWinCelebration(ConvoyColors());
+                StartCoroutine(Delayed(0.9f, _feedback.TruckDeparts));
+                StartCoroutine(Delayed(1.3f, _feedback.TruckDeparts));
             }
             else if (State.IsStuck())
             {
-                CurrentPhase = Phase.Lost;
+                SetPhase(Phase.Lost);
             }
+            UpdateHint();
+        }
+
+        /// <summary>Konvoyda geçecek kamyon renkleri (bölümdeki ilk 3 farklı renk).</summary>
+        private int[] ConvoyColors()
+        {
+            var colors = new System.Collections.Generic.List<int>();
+            foreach (int c in _levelData.trucks)
+            {
+                if (!colors.Contains(c)) colors.Add(c);
+                if (colors.Count == 3) break;
+            }
+            return colors.ToArray();
+        }
+
+        // ---------- İpucu ----------
+
+        /// <summary>
+        /// Önerilen hamle: önce raftan yüklenebilen koli, sonra doğrudan kamyona gidebilen
+        /// koli, yoksa rafa konduğunda bölümü çözülebilir bırakan sütun.
+        /// </summary>
+        private void UpdateHint()
+        {
+            _hint = default;
+            if (State == null || CurrentPhase != Phase.Playing) return;
+
+            for (int s = 0; s < State.Buffer.Length; s++)
+                if (State.CanTapBuffer(s))
+                {
+                    _hint = new Hint { Valid = true, Kind = Tappable.TapKind.Buffer, Index = s,
+                        Text = "Raftaki koliye dokun: kendi kamyonuna yüklensin!" };
+                    return;
+                }
+
+            for (int c = 0; c < State.Columns.Count; c++)
+            {
+                int color = State.FrontCrate(c);
+                if (color >= 0 && State.FindDockFor(color) >= 0)
+                {
+                    _hint = new Hint { Valid = true, Kind = Tappable.TapKind.Column, Index = c,
+                        Text = "Öndeki koliye dokun: aynı renkteki kamyona gider!" };
+                    return;
+                }
+            }
+
+            int fallback = -1;
+            for (int c = 0; c < State.Columns.Count; c++)
+            {
+                if (!State.CanTapColumn(c)) continue;
+                if (fallback < 0) fallback = c;
+                BoardState next = State.Clone();
+                next.TapColumn(c);
+                if (LevelSolver.IsSolvableFrom(next))
+                {
+                    fallback = c;
+                    break;
+                }
+            }
+            if (fallback >= 0)
+                _hint = new Hint { Valid = true, Kind = Tappable.TapKind.Column, Index = fallback,
+                    Text = "Uygun kamyon yok: koli rafa gider, kamyonu gelince yüklersin." };
         }
 
         private static IEnumerator Delayed(float seconds, System.Action action)

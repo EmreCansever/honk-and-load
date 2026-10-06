@@ -8,6 +8,7 @@ namespace HonkAndLoad.Core
         private const string LevelKey = "hal_level";
         private const string SoundKey = "hal_sound";
         private const string HapticsKey = "hal_haptics";
+        private const string TutorialKey = "hal_tutorial_done";
 
         public static int CurrentLevel
         {
@@ -27,7 +28,18 @@ namespace HonkAndLoad.Core
             set { PlayerPrefs.SetInt(HapticsKey, value ? 1 : 0); PlayerPrefs.Save(); }
         }
 
-        /// <summary>Bölüm ilerlemesini sıfırlar; ses ve titreşim ayarları korunur.</summary>
-        public static void ResetLevels() => CurrentLevel = 1;
+        /// <summary>Öğretici (1. bölüm) bir kez tamamlandı mı?</summary>
+        public static bool TutorialDone
+        {
+            get => PlayerPrefs.GetInt(TutorialKey, 0) == 1;
+            set { PlayerPrefs.SetInt(TutorialKey, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>Bölüm ilerlemesini ve öğreticiyi sıfırlar; ses ve titreşim ayarları korunur.</summary>
+        public static void ResetLevels()
+        {
+            CurrentLevel = 1;
+            TutorialDone = false;
+        }
     }
 }

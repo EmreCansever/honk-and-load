@@ -14,6 +14,9 @@ namespace HonkAndLoad.Core
 
         public bool HapticsEnabled = true;
 
+        /// <summary>Art arda kamyona yapılan yükleme sayısı (rafa koyunca sıfırlanır).</summary>
+        public int Combo => _combo;
+
         private void Awake()
         {
             _source = gameObject.AddComponent<AudioSource>();

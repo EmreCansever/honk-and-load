@@ -22,6 +22,21 @@ namespace HonkAndLoad.UI
         private GUIStyle _logo, _subtitle, _title, _label, _small, _button, _secondary, _panel;
         private readonly List<Texture2D> _textures = new List<Texture2D>();
 
+        // Uçan yazılar ("x3 Kombo!", "Teslim!")
+        private class PopupText
+        {
+            public string Text;
+            public Vector3 World;
+            public Color Color;
+            public float Age;
+            public float Delay;
+        }
+
+        private const float PopupLife = 1.1f;
+        private readonly List<PopupText> _popups = new List<PopupText>();
+        private GUIStyle _popup, _bubble;
+        private Texture2D _ringTex, _arrowTex;
+
         // Bu karede çizilen arayüz alanları (ekran koordinatı, y aşağıdan yukarı)
         private static readonly List<Rect> HudRects = new List<Rect>();
 
@@ -64,6 +79,15 @@ namespace HonkAndLoad.UI
 
             _panel = new GUIStyle(GUI.skin.box);
             _panel.normal.background = Tex(new Color(0f, 0f, 0f, 0.55f));
+
+            _popup = Text(58, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _bubble = Text(42, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.15f, 0.15f, 0.2f));
+            _bubble.normal.background = Tex(new Color(1f, 1f, 1f, 0.95f));
+            _bubble.padding = new RectOffset(30, 30, 20, 20);
+
+            _ringTex = ShapeTex(128, (u, v) => { float r = Mathf.Sqrt(u * u + v * v); return r < 0.95f && r > 0.72f; });
+            _arrowTex = ShapeTex(64, (u, v) => (v < 0.9f && v > -0.1f && Mathf.Abs(u) < 0.22f)
+                                              || (v <= -0.1f && v > -0.95f && Mathf.Abs(u) < (v + 0.95f) * 0.9f));
         }
 
         private static GUIStyle Text(int size, FontStyle style, TextAnchor anchor, Color color)
@@ -95,6 +119,109 @@ namespace HonkAndLoad.UI
             return t;
         }
 
+        /// <summary>Kenarları yumuşatılmış beyaz şekil dokusu (koordinatlar -1..1).</summary>
+        private Texture2D ShapeTex(int size, System.Func<float, float, bool> inside)
+        {
+            var t = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var px = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    int hits = 0;
+                    for (int sy = 0; sy < 2; sy++)
+                        for (int sx = 0; sx < 2; sx++)
+                        {
+                            float u = (x + 0.25f + 0.5f * sx) / size * 2f - 1f;
+                            float v = (y + 0.25f + 0.5f * sy) / size * 2f - 1f;
+                            if (inside(u, v)) hits++;
+                        }
+                    px[y * size + x] = new Color32(255, 255, 255, (byte)(255 * hits / 4));
+                }
+            t.SetPixels32(px);
+            t.Apply();
+            _textures.Add(t);
+            return t;
+        }
+
+        // ---------- Uçan yazılar ----------
+
+        public void Popup(string text, Vector3 world, Color color, float delay)
+        {
+            _popups.Add(new PopupText { Text = text, World = world, Color = color, Delay = delay });
+        }
+
+        private void Update()
+        {
+            for (int i = _popups.Count - 1; i >= 0; i--)
+            {
+                PopupText p = _popups[i];
+                if (p.Delay > 0f) { p.Delay -= Time.deltaTime; continue; }
+                p.Age += Time.deltaTime;
+                if (p.Age > PopupLife) _popups.RemoveAt(i);
+            }
+        }
+
+        private void DrawPopups()
+        {
+            Camera cam = Camera.main;
+            if (cam == null) return;
+            Color old = GUI.color;
+            foreach (PopupText p in _popups)
+            {
+                if (p.Delay > 0f) continue;
+                Vector3 sp = cam.WorldToScreenPoint(p.World);
+                if (sp.z < 0f) continue;
+                float k = p.Age / PopupLife;
+                float x = sp.x / _scale, y = (Screen.height - sp.y) / _scale - 60f - k * 120f;
+                float pop = k < 0.15f ? Mathf.Lerp(0.6f, 1.1f, k / 0.15f) : 1f;
+                var shadow = new Color(0f, 0f, 0f, 0.5f * (1f - k));
+                Matrix4x4 m = GUI.matrix;
+                GUIUtility.ScaleAroundPivot(Vector2.one * pop, new Vector2(x * _scale, y * _scale));
+                GUI.color = shadow;
+                GUI.Label(new Rect(x - 300 + 4, y - 40 + 4, 600, 80), p.Text, _popup);
+                GUI.color = new Color(p.Color.r, p.Color.g, p.Color.b, 1f - k * k);
+                GUI.Label(new Rect(x - 300, y - 40, 600, 80), p.Text, _popup);
+                GUI.matrix = m;
+            }
+            GUI.color = old;
+        }
+
+        // ---------- İpucu ----------
+
+        private void DrawHint(float w, float h)
+        {
+            if (!_game.HintVisible) return;
+            Camera cam = Camera.main;
+            if (cam == null) return;
+            Vector3 sp = cam.WorldToScreenPoint(_game.HintWorld);
+            if (sp.z < 0f) return;
+            float x = sp.x / _scale, y = (Screen.height - sp.y) / _scale;
+            float t = Time.unscaledTime;
+
+            // Atan halka
+            float pulse = 1f + 0.12f * Mathf.Sin(t * 6f);
+            float size = 170f * pulse;
+            Color old = GUI.color;
+            GUI.color = new Color(1f, 0.85f, 0.2f, 0.95f);
+            GUI.DrawTexture(new Rect(x - size / 2, y - size / 2, size, size), _ringTex);
+
+            // Yukarıdan inip kalkan ok
+            float bob = Mathf.Abs(Mathf.Sin(t * 4f)) * 30f;
+            GUI.color = Color.white;
+            GUI.DrawTexture(new Rect(x - 40, y - size / 2 - 120 - bob, 80, 110), _arrowTex);
+            GUI.color = old;
+
+            // Öğretici açıklaması (yalnızca 1. bölümde)
+            string text = _game.HintText;
+            if (!string.IsNullOrEmpty(text))
+            {
+                // Alt kısımda: kamyonları ve dokunulacak koliyi kapatmasın
+                float bottomInset = Screen.safeArea.y / _scale;
+                Rect r = new Rect(60, h - bottomInset - 200, w - 120, 150);
+                GUI.Label(r, text, _bubble);
+            }
+        }
+
         // ---------- Çizim ----------
 
         private void OnGUI()
@@ -115,9 +242,13 @@ namespace HonkAndLoad.UI
             }
             if (_game.State == null) return;
 
-            DrawTopBar(w, SafeTopInsetPixels() / _scale);
-            if (_game.CurrentPhase == GameController.Phase.Won) DrawWin(w, h);
-            else if (_game.CurrentPhase == GameController.Phase.Lost) DrawLose(w, h);
+            float inset = SafeTopInsetPixels() / _scale;
+            DrawTopBar(w, inset);
+            DrawHint(w, h);
+            DrawPopups();
+            // Kazanınca önce konvoy ve konfeti oynasın, panel biraz sonra gelsin
+            if (_game.CurrentPhase == GameController.Phase.Won && _game.PhaseTime > 1.6f) DrawWin(w, h);
+            else if (_game.CurrentPhase == GameController.Phase.Lost && _game.PhaseTime > 0.4f) DrawLose(w, h);
         }
 
         private void DrawMenu(float w, float h)
