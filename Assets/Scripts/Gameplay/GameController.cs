@@ -38,7 +38,7 @@ namespace HonkAndLoad.Gameplay
         public string HintText => IsTutorial && _hint.Valid ? _hint.Text : null;
 
         // Reklam videosu modu
-        public const int VideoLevel = 7;
+        public const int VideoLevel = 10; // zor bölüm: raf kullanılır, gerilim olur
         public const int VideoFps = 30;
         public bool VideoMode { get; private set; }
         public float VideoTime { get; private set; }
@@ -96,6 +96,7 @@ namespace HonkAndLoad.Gameplay
         public void StartVideoMode(bool record)
         {
             VideoMode = true;
+            Hud.IsVideo = true;
             VideoTime = 0f;
             AudioListener.volume = 1f;
             if (record)
@@ -121,7 +122,7 @@ namespace HonkAndLoad.Gameplay
                 yield return new WaitForSeconds(0.1f);
                 if (_hint.Kind == Tappable.TapKind.Column) HandleColumnTap(_hint.Index);
                 else HandleBufferTap(_hint.Index);
-                yield return new WaitForSeconds(0.3f + (float)rng.NextDouble() * 0.18f);
+                yield return new WaitForSeconds(0.26f + (float)rng.NextDouble() * 0.14f);
             }
 
             // Konvoy + kapanış ekranı
@@ -278,7 +279,8 @@ namespace HonkAndLoad.Gameplay
             {
                 _feedback.Load();
                 int combo = _feedback.Combo;
-                if (combo >= 3)
+                // Yalnızca dönüm noktalarında: 3, 5, 8, 10, 15, 20...
+                if (combo == 3 || combo == 5 || combo == 8 || (combo >= 10 && combo % 5 == 0))
                     _hud.Popup($"x{combo} Kombo!", _view.DockWorld(move.ToDock), Palette.Warning, 0f);
             }
             else _feedback.ToBuffer();

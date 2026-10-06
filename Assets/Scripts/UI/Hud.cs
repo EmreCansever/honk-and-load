@@ -34,7 +34,7 @@ namespace HonkAndLoad.UI
 
         private const float PopupLife = 1.1f;
         private readonly List<PopupText> _popups = new List<PopupText>();
-        private GUIStyle _popup, _bubble, _hook;
+        private GUIStyle _popup, _bubble, _hook, _cta, _smallLogo;
         private Texture2D _ringTex, _arrowTex, _dotTex;
 
         // Video modunda dokunma işareti
@@ -57,8 +57,13 @@ namespace HonkAndLoad.UI
         public static float TopReservedPixels()
         {
             float scale = Screen.width / DesignWidth;
-            return SafeTopInsetPixels() + (TopBarHeight + 90f) * scale; // bar + "Raf dolmak üzere" yazısı
+            // Video modunda üstte açılış sorusu / logo için daha geniş boşluk
+            float reserved = IsVideo ? 330f : TopBarHeight + 90f; // bar + "Raf dolmak üzere" yazısı
+            return SafeTopInsetPixels() + reserved * scale;
         }
+
+        /// <summary>Kamera sığdırma için: oyun video modunda mı?</summary>
+        public static bool IsVideo;
 
         public static bool IsPointerOverHud(Vector2 screenPos)
         {
@@ -202,6 +207,11 @@ namespace HonkAndLoad.UI
 
         private void DrawVideo(float w, float h)
         {
+            if (_cta == null)
+            {
+                _cta = new GUIStyle(_button) { fontSize = 76 };
+                _smallLogo = Text(70, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            }
             DrawPopups();
             Color old = GUI.color;
 
@@ -228,6 +238,13 @@ namespace HonkAndLoad.UI
                 float y = SafeTopInsetPixels() / _scale + 70f;
                 ShadowLabel(new Rect(40, y, w - 80, 230), "Bu depoyu\nboşaltabilir misin?", _hook, a);
             }
+            else if (_game.CurrentPhase == GameController.Phase.Playing || _game.PhaseTime < 1.9f)
+            {
+                // Soru kaybolunca üstte küçük oyun adı kalsın
+                float a = Mathf.Clamp01((t - 3.2f) / 0.4f);
+                float y = SafeTopInsetPixels() / _scale + 110f;
+                ShadowLabel(new Rect(40, y, w - 80, 120), "Honk & Load!", _smallLogo, a);
+            }
 
             // Kapanış ekranı
             if (_game.CurrentPhase == GameController.Phase.Won && _game.PhaseTime > 1.9f)
@@ -253,7 +270,7 @@ namespace HonkAndLoad.UI
                 float pulse = 1f + 0.05f * Mathf.Sin(_game.PhaseTime * 7f);
                 float bw = (w - 240) * pulse, bh = 170 * pulse;
                 GUI.color = new Color(1f, 1f, 1f, k);
-                GUI.Label(new Rect((w - bw) / 2, h * 0.6f - bh / 2, bw, bh), "Ücretsiz Oyna!", _button);
+                GUI.Label(new Rect((w - bw) / 2, h * 0.6f - bh / 2, bw, bh), "Ücretsiz Oyna!", _cta);
             }
             GUI.color = old;
         }
@@ -467,6 +484,7 @@ namespace HonkAndLoad.UI
         private void OnDestroy()
         {
             HudRects.Clear();
+            IsVideo = false;
             foreach (Texture2D t in _textures) if (t != null) Destroy(t);
         }
     }
