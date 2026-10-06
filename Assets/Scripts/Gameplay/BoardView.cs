@@ -12,7 +12,7 @@ namespace HonkAndLoad.Gameplay
     public class BoardView : MonoBehaviour
     {
         // Yerleşim (dünya birimi)
-        private const float CrateSize = 0.78f;
+        private const float CrateSize = VisualFactory.CrateSize;
         private const float ColumnSpacing = 1.0f;
         private const float RowSpacing = 0.92f;
         private const float BufferSpacing = 1.0f;
@@ -27,8 +27,7 @@ namespace HonkAndLoad.Gameplay
         private Transform[] _bufferCrates = new Transform[0];
         private readonly List<GameObject> _bufferPlates = new List<GameObject>();
         private TruckView[] _docks = new TruckView[0];
-        private readonly Dictionary<Color, Material> _materials = new Dictionary<Color, Material>();
-        private Material _baseMaterial;
+        private readonly VisualFactory _factory = new VisualFactory();
         private Transform _root;
         private readonly Dictionary<Transform, Coroutine> _moves = new Dictionary<Transform, Coroutine>();
 
@@ -39,6 +38,7 @@ namespace HonkAndLoad.Gameplay
             public Transform Root;
             public readonly List<Transform> Cargo = new List<Transform>();
             public float BedLength;
+            public float CargoY;
         }
 
         // ---------- Kurulum ----------
@@ -64,6 +64,7 @@ namespace HonkAndLoad.Gameplay
                     list.Add(crate);
                 }
                 _columns.Add(list);
+                RefreshColumnTint(c);
             }
 
             BuildBuffer();
@@ -115,7 +116,7 @@ namespace HonkAndLoad.Gameplay
                 plate.transform.SetParent(_root, false);
                 plate.transform.localPosition = BufferSlot(i) - Vector3.up * 0.42f;
                 plate.transform.localScale = new Vector3(0.9f, 0.06f, 0.9f);
-                Paint(plate, Palette.Slot);
+                _factory.Paint(plate, Palette.Slot);
                 SetTappable(plate, Tappable.TapKind.Buffer, i);
                 _bufferPlates.Add(plate);
             }
@@ -124,13 +125,15 @@ namespace HonkAndLoad.Gameplay
 
         private void BuildGround()
         {
-            GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            ground.name = "Ground";
-            ground.transform.SetParent(_root, false);
-            ground.transform.localPosition = new Vector3(0f, -0.55f, 1f);
-            ground.transform.localScale = new Vector3(40f, 0.1f, 40f);
-            Paint(ground, Palette.Ground);
-            Destroy(ground.GetComponent<Collider>());
+            int maxDepth = 1;
+            foreach (List<int> c in _state.Columns) maxDepth = Mathf.Max(maxDepth, c.Count);
+            var xs = new float[_state.Columns.Count];
+            for (int i = 0; i < xs.Length; i++) xs[i] = ColumnSlot(i, 0).x;
+            float width = Mathf.Max(_state.Columns.Count * ColumnSpacing, _state.Buffer.Length * BufferSpacing);
+            _factory.BuildEnvironment(_root, width,
+                ColumnFrontZ, ColumnFrontZ - (maxDepth - 1) * RowSpacing,
+                BufferZ, _state.Buffer.Length * BufferSpacing,
+                DockZ, _state.Docks.Length, DockSpacing, xs);
         }
 
         private void ComputeBounds()
@@ -167,48 +170,21 @@ namespace HonkAndLoad.Gameplay
         }
 
         private static Vector3 CargoSlot(TruckView truck, int slot) =>
-            new Vector3(0f, 0.62f, -truck.BedLength / 2f + 0.45f + slot * 0.82f);
+            new Vector3(0f, truck.CargoY, -truck.BedLength / 2f + 0.5f + slot * VisualFactory.CargoSpacing);
 
         // ---------- Nesne üretimi ----------
 
-        private Transform MakeCrate(int color, Transform parent)
-        {
-            GameObject crate = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            crate.name = $"Crate_{color}";
-            crate.transform.SetParent(parent, false);
-            crate.transform.localScale = Vector3.one * CrateSize;
-            Paint(crate, Palette.Crate(color));
-            return crate.transform;
-        }
+        private Transform MakeCrate(int color, Transform parent) => _factory.CreateCrate(color, parent);
 
         private TruckView MakeTruck(Truck truck, Vector3 position)
         {
-            var view = new TruckView { BedLength = truck.Capacity * 0.82f + 0.2f };
-            var root = new GameObject($"Truck_{truck.Color}").transform;
-            root.SetParent(_root, false);
-            root.localPosition = position;
-            view.Root = root;
-
-            GameObject bed = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            bed.name = "Bed";
-            bed.transform.SetParent(root, false);
-            bed.transform.localPosition = new Vector3(0f, -0.05f, 0f);
-            bed.transform.localScale = new Vector3(1.3f, 0.35f, view.BedLength);
-            Paint(bed, Palette.Truck(truck.Color));
-            Destroy(bed.GetComponent<Collider>());
-
-            GameObject cab = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            cab.name = "Cab";
-            cab.transform.SetParent(root, false);
-            cab.transform.localPosition = new Vector3(0f, 0.3f, view.BedLength / 2f + 0.45f);
-            cab.transform.localScale = new Vector3(1.3f, 0.95f, 0.8f);
-            Paint(cab, Palette.Crate(truck.Color));
-            Destroy(cab.GetComponent<Collider>());
+            VisualFactory.TruckParts parts = _factory.CreateTruck(truck.Color, truck.Capacity, _root, position);
+            var view = new TruckView { Root = parts.Root, BedLength = parts.BedLength, CargoY = parts.CargoY };
 
             // Kamyonda zaten yük varsa (ör. yeniden çizim) göster
             for (int i = 0; i < truck.Load; i++)
             {
-                Transform crate = MakeCrate(truck.Color, root);
+                Transform crate = MakeCrate(truck.Color, view.Root);
                 crate.localPosition = CargoSlot(view, i);
                 Destroy(crate.GetComponent<Collider>());
                 view.Cargo.Add(crate);
@@ -216,16 +192,12 @@ namespace HonkAndLoad.Gameplay
             return view;
         }
 
-        private void Paint(GameObject go, Color color)
+        /// <summary>Yalnızca en öndeki koli parlak; arkadakiler soluk.</summary>
+        private void RefreshColumnTint(int column)
         {
-            var renderer = go.GetComponent<Renderer>();
-            if (_baseMaterial == null) _baseMaterial = renderer.sharedMaterial;
-            if (!_materials.TryGetValue(color, out Material mat))
-            {
-                mat = new Material(_baseMaterial) { color = color };
-                _materials[color] = mat;
-            }
-            renderer.sharedMaterial = mat;
+            List<Transform> col = _columns[column];
+            for (int i = 0; i < col.Count; i++)
+                if (col[i] != null) _factory.SetCrateDimmed(col[i], i != col.Count - 1);
         }
 
         private static void SetTappable(GameObject go, Tappable.TapKind kind, int index)
@@ -249,6 +221,7 @@ namespace HonkAndLoad.Gameplay
                 // Kalan koliler öne kayar
                 for (int i = 0; i < col.Count; i++)
                     StartMove(col[i], ColumnSlot(move.FromColumn, col.Count - 1 - i), 0.15f, 0f);
+                RefreshColumnTint(move.FromColumn);
             }
             else
             {

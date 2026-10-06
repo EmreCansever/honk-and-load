@@ -37,6 +37,12 @@ docs/
   GDD.md                Oyun tasarım dokümanı özeti
 ```
 
+## Görseller
+
+Tüm görseller kodla üretilir (`VisualFactory`): kolilerde renk körleri için sembol, kamyonlarda tekerlek ve kabin, depo zemini.
+
+**İsteğe bağlı hazır kamyon modeli:** `Assets/Resources/Models/` klasörüne `Truck` adlı bir model (.fbx veya prefab) koyarsan oyun onu kullanır, boyutunu otomatik ayarlar ve kamyonun rengine boyar. Kamyonlar geri geri gidiyorsa `VisualFactory.TruckModelExtraYaw` değerini `180` yap.
+
 ## Bölüm dosyası formatı
 
 ```json

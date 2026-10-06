@@ -24,5 +24,9 @@ namespace HonkAndLoad.Core
         public static readonly Color Ground = new Color(0.86f, 0.88f, 0.92f);
         public static readonly Color Slot = new Color(0.74f, 0.77f, 0.83f);
         public static readonly Color Background = new Color(0.55f, 0.75f, 0.95f);
+        public static readonly Color Asphalt = new Color(0.32f, 0.34f, 0.38f);
+        public static readonly Color Warning = new Color(1.0f, 0.82f, 0.15f);
+        public static readonly Color Shelf = new Color(0.55f, 0.6f, 0.68f);
+        public static readonly Color Lane = new Color(0.8f, 0.82f, 0.86f);
     }
 }
