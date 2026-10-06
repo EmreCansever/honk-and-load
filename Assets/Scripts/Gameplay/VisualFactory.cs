@@ -16,9 +16,6 @@ namespace HonkAndLoad.Gameplay
         public const float CrateSize = 0.78f;
         public const float CargoSpacing = 0.82f;
 
-        /// <summary>Hazır kamyon modeli ters yöne bakıyorsa bunu 180 yap.</summary>
-        public const float TruckModelExtraYaw = 0f;
-
         private readonly Dictionary<Color, Material> _materials = new Dictionary<Color, Material>();
         private readonly Dictionary<int, Sprite> _symbols = new Dictionary<int, Sprite>();
         private Material _baseMaterial;
@@ -96,37 +93,72 @@ namespace HonkAndLoad.Gameplay
 
         // ---------- Kamyon ----------
 
+        /// <summary>Hazır model kullanılırken hedef kamyon genişliği (dünya birimi).</summary>
+        private const float ModelTargetWidth = 1.9f;
+        /// <summary>Hazır modelin boyuna hafif uzatılması (kasaya 3 koli sığsın diye).</summary>
+        private const float ModelStretchZ = 1.2f;
+        /// <summary>Kamyonun arka ucunun rampa noktasına göre konumu.</summary>
+        private const float TruckRearZ = -1.45f;
+
         public class TruckParts
         {
             public Transform Root;
-            public float BedLength;
-            public float CargoY;
+            /// <summary>Kasadaki her koli yerinin kamyona göre konumu.</summary>
+            public Vector3[] Slots;
+            /// <summary>Kasadaki kolilerin boyut çarpanı (küçük kasalarda koliler küçülür).</summary>
+            public float CargoScale = 1f;
+        }
+
+        /// <summary>Hazır modelin bir kez yapılan ölçüm sonucu.</summary>
+        private class ModelInfo
+        {
+            public float Yaw;
+            public Vector3 Scale;
+            public Vector3 Offset;
+            public float BedStartZ, BedEndZ, BedTopY; // kamyon koordinatında
+            public float FrontZ;
+        }
+
+        private ModelInfo _modelInfo;
+
+        public bool UsesTruckModel
+        {
+            get { EnsureTruckModel(); return _truckModel != null; }
+        }
+
+        /// <summary>Rampalar arası mesafe: hazır model daha geniş olduğu için açılır.</summary>
+        public float DockSpacing => UsesTruckModel ? ModelTargetWidth + 0.3f : 1.9f;
+
+        /// <summary>Kamyonun rampa noktasından ne kadar ileri uzandığı (kamera sığdırma için).</summary>
+        public float TruckFrontExtent(int capacity) =>
+            UsesTruckModel ? _modelInfo.FrontZ : capacity * CargoSpacing / 2f + 0.95f;
+
+        private void EnsureTruckModel()
+        {
+            if (_truckModelChecked) return;
+            _truckModelChecked = true;
+            _truckModel = Resources.Load<GameObject>("Models/Truck");
+            if (_truckModel != null) _modelInfo = AnalyzeModel(_truckModel);
         }
 
         public TruckParts CreateTruck(int color, int capacity, Transform parent, Vector3 position)
         {
-            var parts = new TruckParts { BedLength = capacity * CargoSpacing + 0.2f };
+            EnsureTruckModel();
             var root = new GameObject($"Truck_{color}").transform;
             root.SetParent(parent, false);
             root.localPosition = position;
-            parts.Root = root;
+            var parts = new TruckParts { Root = root };
 
-            if (!_truckModelChecked)
-            {
-                _truckModel = Resources.Load<GameObject>("Models/Truck");
-                _truckModelChecked = true;
-            }
-
-            if (_truckModel != null) BuildModelTruck(parts, color);
-            else BuildProceduralTruck(parts, color);
+            if (_truckModel != null) BuildModelTruck(parts, color, capacity);
+            else BuildProceduralTruck(parts, color, capacity);
             return parts;
         }
 
-        private void BuildProceduralTruck(TruckParts p, int color)
+        private void BuildProceduralTruck(TruckParts p, int color, int capacity)
         {
             Color body = Palette.Crate(color);
             Color dark = Palette.Truck(color);
-            float L = p.BedLength;
+            float L = capacity * CargoSpacing + 0.2f;
             Transform r = p.Root;
 
             // Şasi ve kasa
@@ -154,7 +186,10 @@ namespace HonkAndLoad.Gameplay
                 Wheel(r, new Vector3(0.62f, -0.27f, z));
             }
 
-            p.CargoY = -0.01f + CrateSize / 2f;
+            p.CargoScale = 1f;
+            p.Slots = new Vector3[capacity];
+            for (int i = 0; i < capacity; i++)
+                p.Slots[i] = new Vector3(0f, -0.01f + CrateSize / 2f, -L / 2f + 0.5f + i * CargoSpacing);
         }
 
         private void Wheel(Transform parent, Vector3 pos)
@@ -169,40 +204,149 @@ namespace HonkAndLoad.Gameplay
             Object.Destroy(w.GetComponent<Collider>());
         }
 
-        /// <summary>
-        /// Hazır modeli kamyon boyutuna sığdırır: en uzun yatay ekseni ileri (+z) çevirir,
-        /// uzunluğu kasaya göre ölçekler, modeli kamyonun rengine boyar.
-        /// </summary>
-        private void BuildModelTruck(TruckParts p, int color)
+        private void BuildModelTruck(TruckParts p, int color, int capacity)
         {
-            GameObject model = Object.Instantiate(_truckModel, p.Root, false);
-            model.name = "Model";
+            ModelInfo m = _modelInfo;
+            var wrapper = new GameObject("Model").transform;
+            wrapper.SetParent(p.Root, false);
+            wrapper.localPosition = m.Offset;
+            wrapper.localScale = m.Scale;
+
+            GameObject model = Object.Instantiate(_truckModel, wrapper, false);
+            model.transform.localRotation = Quaternion.Euler(0f, m.Yaw, 0f) * _truckModel.transform.localRotation;
             foreach (Collider c in model.GetComponentsInChildren<Collider>()) Object.Destroy(c);
-
-            Bounds b = LocalBounds(model.transform, p.Root);
-            float yaw = (b.size.x > b.size.z ? 90f : 0f) + TruckModelExtraYaw;
-            model.transform.localRotation = Quaternion.Euler(0f, yaw, 0f) * model.transform.localRotation;
-
-            b = LocalBounds(model.transform, p.Root);
-            float targetLength = p.BedLength + 1.0f;
-            float scale = b.size.z > 0.001f ? targetLength / b.size.z : 1f;
-            model.transform.localScale *= scale;
-
-            b = LocalBounds(model.transform, p.Root);
-            // Tekerlekler zemine (y = -0.5) otursun, kasa ortalansın (kabin önde)
-            model.transform.localPosition += new Vector3(-b.center.x, -0.5f - b.min.y, 0.5f - b.center.z);
 
             Color tint = Color.Lerp(Palette.Crate(color), Color.white, 0.15f);
             foreach (Renderer rend in model.GetComponentsInChildren<Renderer>())
             {
                 Material[] mats = rend.materials; // örnek kopyaları: yalnızca bu kamyon boyanır
-                foreach (Material m in mats) m.color = tint;
+                foreach (Material mat in mats) mat.color = tint;
                 rend.materials = mats;
             }
 
-            b = LocalBounds(model.transform, p.Root);
-            // Kasa yüksekliği tahmini: modelin alt %40'ı
-            p.CargoY = b.min.y + b.size.y * 0.4f + CrateSize / 2f;
+            // Kolileri kasanın içine eşit aralıkla diz; sığmazsa küçült
+            float pitch = (m.BedEndZ - m.BedStartZ) / capacity;
+            p.CargoScale = Mathf.Clamp(pitch * 0.9f / CrateSize, 0.4f, 1f);
+            float half = CrateSize * p.CargoScale / 2f;
+            p.Slots = new Vector3[capacity];
+            for (int i = 0; i < capacity; i++)
+                p.Slots[i] = new Vector3(0f, m.BedTopY + half, m.BedStartZ + pitch * (i + 0.5f));
+        }
+
+        /// <summary>
+        /// Hazır modeli bir kez ölçer: yönünü (kabin önde), ölçeğini ve kasanın nerede
+        /// olduğunu bulur. Kasa = kabinin arkasındaki en uzun alçak bölge.
+        /// </summary>
+        private ModelInfo AnalyzeModel(GameObject prefab)
+        {
+            var temp = new GameObject("TruckModelProbe").transform;
+            GameObject model = Object.Instantiate(prefab, temp, false);
+            Quaternion baseRot = prefab.transform.localRotation;
+
+            Bounds b = LocalBounds(model.transform, temp);
+            float yaw = b.size.x > b.size.z ? 90f : 0f;
+            model.transform.localRotation = Quaternion.Euler(0f, yaw, 0f) * baseRot;
+
+            float[] heights = HeightProfile(model.transform, temp, out Bounds mb, out bool readable);
+            int n = heights.Length;
+
+            // Kabin (en yüksek bölge) arkada kaldıysa modeli çevir
+            int tallest = 0;
+            for (int i = 1; i < n; i++) if (heights[i] > heights[tallest]) tallest = i;
+            if (readable && tallest < n / 2)
+            {
+                yaw += 180f;
+                model.transform.localRotation = Quaternion.Euler(0f, yaw, 0f) * baseRot;
+                heights = HeightProfile(model.transform, temp, out mb, out readable);
+                tallest = 0;
+                for (int i = 1; i < n; i++) if (heights[i] > heights[tallest]) tallest = i;
+            }
+
+            // Kasa: kabinin arkasında, yüksekliği alt %30'da kalan en uzun kesintisiz bölge
+            float bedStartFrac = 0.09f, bedEndFrac = 0.51f, bedTopFrac = 0.47f; // Kenney truck-flat için yedek değerler
+            if (readable)
+            {
+                float minH = float.MaxValue, maxH = float.MinValue;
+                foreach (float h in heights)
+                    if (!float.IsNegativeInfinity(h)) { minH = Mathf.Min(minH, h); maxH = Mathf.Max(maxH, h); }
+                float limit = minH + 0.35f * (maxH - minH);
+                int bestStart = -1, bestLen = 0;
+                for (int i = 0; i < tallest; )
+                {
+                    if (heights[i] > limit || float.IsNegativeInfinity(heights[i])) { i++; continue; }
+                    int j = i;
+                    while (j < tallest && heights[j] <= limit && !float.IsNegativeInfinity(heights[j])) j++;
+                    if (j - i > bestLen) { bestLen = j - i; bestStart = i; }
+                    i = j;
+                }
+                if (bestLen >= 2)
+                {
+                    float top = float.MinValue;
+                    for (int i = bestStart; i < bestStart + bestLen; i++) top = Mathf.Max(top, heights[i]);
+                    bedStartFrac = (float)bestStart / n + 0.02f;
+                    bedEndFrac = (float)(bestStart + bestLen) / n - 0.02f;
+                    bedTopFrac = (top - mb.min.y) / Mathf.Max(0.001f, mb.size.y);
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[HonkAndLoad] Kamyon modeli okunamıyor; Truck.fbx için Inspector'da Read/Write'ı aç. Yaklaşık değerler kullanılıyor.");
+            }
+
+            // Ölçek: genişlik sabit, boy hafif uzatılmış
+            float s = ModelTargetWidth / Mathf.Max(0.001f, mb.size.x);
+            var info = new ModelInfo { Yaw = yaw, Scale = new Vector3(s, s, s * ModelStretchZ) };
+            float length = mb.size.z * s * ModelStretchZ;
+            float height = mb.size.y * s;
+            // Arka uç TruckRearZ'de, tekerlekler zeminde (y = -0.5), ortalanmış
+            info.Offset = new Vector3(-mb.center.x * s, -0.5f - mb.min.y * s, TruckRearZ - mb.min.z * s * ModelStretchZ);
+            info.BedStartZ = TruckRearZ + bedStartFrac * length;
+            info.BedEndZ = TruckRearZ + bedEndFrac * length;
+            info.BedTopY = -0.5f + bedTopFrac * height;
+            info.FrontZ = TruckRearZ + length;
+
+            Object.DestroyImmediate(temp.gameObject); // aynı karede görünmesin
+            return info;
+        }
+
+        /// <summary>
+        /// Modelin boyuna (z) göre üst yüzey yüksekliği. Yalnızca orta çizgiden (x≈0) geçen
+        /// üçgenler sayılır; böylece yan çamurluklar kasayı yüksek göstermez.
+        /// </summary>
+        private static float[] HeightProfile(Transform model, Transform space, out Bounds bounds, out bool readable)
+        {
+            const int bins = 32;
+            var heights = new float[bins];
+            for (int i = 0; i < bins; i++) heights[i] = float.NegativeInfinity;
+            bounds = LocalBounds(model, space);
+            readable = true;
+
+            float z0 = bounds.min.z, zSize = Mathf.Max(0.001f, bounds.size.z);
+            float cx = bounds.center.x, tolerance = bounds.size.x * 0.05f;
+            foreach (MeshFilter mf in model.GetComponentsInChildren<MeshFilter>())
+            {
+                Mesh mesh = mf.sharedMesh;
+                if (mesh == null) continue;
+                if (!mesh.isReadable) { readable = false; continue; }
+                Vector3[] v = mesh.vertices;
+                int[] t = mesh.triangles;
+                Matrix4x4 toSpace = space.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+                for (int k = 0; k < v.Length; k++) v[k] = toSpace.MultiplyPoint3x4(v[k]);
+                for (int k = 0; k < t.Length; k += 3)
+                {
+                    Vector3 a = v[t[k]], b = v[t[k + 1]], c = v[t[k + 2]];
+                    float minX = Mathf.Min(a.x, Mathf.Min(b.x, c.x)), maxX = Mathf.Max(a.x, Mathf.Max(b.x, c.x));
+                    if (minX > cx + tolerance || maxX < cx - tolerance) continue;
+                    float minZ = Mathf.Min(a.z, Mathf.Min(b.z, c.z)), maxZ = Mathf.Max(a.z, Mathf.Max(b.z, c.z));
+                    float y = Mathf.Max(a.y, Mathf.Max(b.y, c.y));
+                    for (int i = 0; i < bins; i++)
+                    {
+                        float mid = z0 + zSize * (i + 0.5f) / bins;
+                        if (mid >= minZ && mid <= maxZ && y > heights[i]) heights[i] = y;
+                    }
+                }
+            }
+            return heights;
         }
 
         private static Bounds LocalBounds(Transform model, Transform space)

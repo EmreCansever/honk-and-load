@@ -41,7 +41,7 @@ docs/
 
 Tüm görseller kodla üretilir (`VisualFactory`): kolilerde renk körleri için sembol, kamyonlarda tekerlek ve kabin, depo zemini.
 
-**İsteğe bağlı hazır kamyon modeli:** `Assets/Resources/Models/` klasörüne `Truck` adlı bir model (.fbx veya prefab) koyarsan oyun onu kullanır, boyutunu otomatik ayarlar ve kamyonun rengine boyar. Kamyonlar geri geri gidiyorsa `VisualFactory.TruckModelExtraYaw` değerini `180` yap.
+**İsteğe bağlı hazır kamyon modeli:** `Assets/Resources/Models/` klasörüne `Truck` adlı bir model (.fbx veya prefab) koyarsan oyun onu kullanır: yönünü (kabin önde), boyutunu ve kasanın yerini modelden otomatik bulur, kamyonun rengine boyar. Modelin Inspector'ında **Read/Write** açık olmalı (Kenney `truck-flat` için açıldı).
 
 ## Bölüm dosyası formatı
 

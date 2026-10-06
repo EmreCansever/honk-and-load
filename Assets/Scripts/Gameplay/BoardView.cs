@@ -16,7 +16,7 @@ namespace HonkAndLoad.Gameplay
         private const float ColumnSpacing = 1.0f;
         private const float RowSpacing = 0.92f;
         private const float BufferSpacing = 1.0f;
-        private const float DockSpacing = 1.9f;
+        private float DockSpacing => _factory.DockSpacing;
         private const float ColumnFrontZ = 0f;
         private const float BufferZ = 1.5f;
         private const float DockZ = 4.4f;
@@ -37,8 +37,8 @@ namespace HonkAndLoad.Gameplay
         {
             public Transform Root;
             public readonly List<Transform> Cargo = new List<Transform>();
-            public float BedLength;
-            public float CargoY;
+            public Vector3[] Slots;
+            public float CargoScale = 1f;
         }
 
         // ---------- Kurulum ----------
@@ -144,7 +144,7 @@ namespace HonkAndLoad.Gameplay
                                     _state.Buffer.Length * BufferSpacing,
                                     _state.Docks.Length * DockSpacing);
             float minZ = ColumnFrontZ - (maxDepth - 1) * RowSpacing - CrateSize;
-            float maxZ = DockZ + 2.2f;
+            float maxZ = DockZ + _factory.TruckFrontExtent(_state.TruckCapacity) + 0.2f;
             var b = new Bounds(new Vector3(0f, 0f, (minZ + maxZ) / 2f), new Vector3(width + 0.6f, 1.5f, maxZ - minZ));
             ContentBounds = b;
         }
@@ -170,7 +170,7 @@ namespace HonkAndLoad.Gameplay
         }
 
         private static Vector3 CargoSlot(TruckView truck, int slot) =>
-            new Vector3(0f, truck.CargoY, -truck.BedLength / 2f + 0.5f + slot * VisualFactory.CargoSpacing);
+            truck.Slots[Mathf.Clamp(slot, 0, truck.Slots.Length - 1)];
 
         // ---------- Nesne üretimi ----------
 
@@ -179,13 +179,14 @@ namespace HonkAndLoad.Gameplay
         private TruckView MakeTruck(Truck truck, Vector3 position)
         {
             VisualFactory.TruckParts parts = _factory.CreateTruck(truck.Color, truck.Capacity, _root, position);
-            var view = new TruckView { Root = parts.Root, BedLength = parts.BedLength, CargoY = parts.CargoY };
+            var view = new TruckView { Root = parts.Root, Slots = parts.Slots, CargoScale = parts.CargoScale };
 
             // Kamyonda zaten yük varsa (ör. yeniden çizim) göster
             for (int i = 0; i < truck.Load; i++)
             {
                 Transform crate = MakeCrate(truck.Color, view.Root);
                 crate.localPosition = CargoSlot(view, i);
+                crate.localScale = Vector3.one * CrateSize * view.CargoScale;
                 Destroy(crate.GetComponent<Collider>());
                 view.Cargo.Add(crate);
             }
@@ -242,6 +243,7 @@ namespace HonkAndLoad.Gameplay
             Destroy(crate.GetComponent<Tappable>());
             Destroy(crate.GetComponent<Collider>());
             crate.SetParent(truck.Root, true);
+            crate.localScale = Vector3.one * CrateSize * truck.CargoScale;
             truck.Cargo.Add(crate);
             StartMove(crate, CargoSlot(truck, move.SlotInTruck), 0.22f, 1.4f);
             StartCoroutine(Squash(truck.Root, 0.22f));
