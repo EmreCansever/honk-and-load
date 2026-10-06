@@ -14,7 +14,8 @@ namespace HonkAndLoad.Level
             if (asset != null)
             {
                 LevelData data = JsonUtility.FromJson<LevelData>(asset.text);
-                if (data != null && data.Validate(out string error)) return data;
+                string error = "dosya okunamadı";
+                if (data != null && data.Validate(out error)) return data;
                 Debug.LogWarning($"[HonkAndLoad] level_{levelNumber:000}.json geçersiz: {error}. Otomatik bölüm üretiliyor.");
             }
             return LevelGenerator.Generate(levelNumber);
