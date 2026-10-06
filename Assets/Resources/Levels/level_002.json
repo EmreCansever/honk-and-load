@@ -1,0 +1,12 @@
+{
+  "truckCapacity": 3,
+  "bufferSize": 6,
+  "dockCount": 3,
+  "trucks": [0, 1, 2, 0],
+  "columns": [
+    { "crates": [0, 1, 0] },
+    { "crates": [2, 0, 0] },
+    { "crates": [1, 2, 1] },
+    { "crates": [0, 2, 0] }
+  ]
+}
