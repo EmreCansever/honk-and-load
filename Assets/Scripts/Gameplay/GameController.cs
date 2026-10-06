@@ -1,4 +1,5 @@
 using System.Collections;
+using System.IO;
 using HonkAndLoad.Core;
 using HonkAndLoad.Level;
 using HonkAndLoad.UI;
@@ -31,10 +32,17 @@ namespace HonkAndLoad.Gameplay
         // İpucu / öğretici
         public bool IsTutorial => LevelNumber == 1 && !Progress.TutorialDone;
         public const float IdleHintSeconds = 7f;
-        public bool HintVisible => CurrentPhase == Phase.Playing && _hint.Valid && (IsTutorial || _idle > IdleHintSeconds);
+        public bool HintVisible => !VideoMode && CurrentPhase == Phase.Playing && _hint.Valid && (IsTutorial || _idle > IdleHintSeconds);
         public Vector3 HintWorld => !_hint.Valid ? Vector3.zero
             : _hint.Kind == Tappable.TapKind.Column ? _view.ColumnFrontWorld(_hint.Index) : _view.BufferWorld(_hint.Index);
         public string HintText => IsTutorial && _hint.Valid ? _hint.Text : null;
+
+        // Reklam videosu modu
+        public const int VideoLevel = 7;
+        public const int VideoFps = 30;
+        public bool VideoMode { get; private set; }
+        public float VideoTime { get; private set; }
+        private VideoRecorder _recorder;
 
         private struct Hint
         {
@@ -67,7 +75,66 @@ namespace HonkAndLoad.Gameplay
         private void Start()
         {
             ApplySettings();
+#if UNITY_EDITOR
+            // "Honk & Load → Reklam Videosu Kaydet" menüsünden başlatıldıysa
+            bool record = UnityEditor.SessionState.GetBool("hal_record_video", false);
+            bool preview = UnityEditor.SessionState.GetBool("hal_record_video_preview", false);
+            UnityEditor.SessionState.SetBool("hal_record_video", false);
+            UnityEditor.SessionState.SetBool("hal_record_video_preview", false);
+            if (record || preview)
+            {
+                StartVideoMode(record);
+                return;
+            }
+#endif
             ShowMenu();
+        }
+
+        // ---------- Reklam videosu ----------
+
+        /// <summary>Arayüzsüz, kendi kendine oynayan mod. record=true ise kare kare kaydeder.</summary>
+        public void StartVideoMode(bool record)
+        {
+            VideoMode = true;
+            VideoTime = 0f;
+            AudioListener.volume = 1f;
+            if (record)
+            {
+                string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Recordings",
+                    "ad_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss")));
+                _recorder = gameObject.AddComponent<VideoRecorder>();
+                _recorder.Begin(folder, VideoFps);
+            }
+            StartLevel(VideoLevel);
+            StartCoroutine(VideoBot());
+        }
+
+        private IEnumerator VideoBot()
+        {
+            var rng = new System.Random(7);
+            yield return new WaitForSeconds(1.8f); // açılış sorusu okunsun
+
+            int safety = 0;
+            while (CurrentPhase == Phase.Playing && _hint.Valid && safety++ < 500)
+            {
+                _hud.ShowTap(HintWorld);
+                yield return new WaitForSeconds(0.1f);
+                if (_hint.Kind == Tappable.TapKind.Column) HandleColumnTap(_hint.Index);
+                else HandleBufferTap(_hint.Index);
+                yield return new WaitForSeconds(0.3f + (float)rng.NextDouble() * 0.18f);
+            }
+
+            // Konvoy + kapanış ekranı
+            yield return new WaitForSeconds(CurrentPhase == Phase.Won ? 5.2f : 1f);
+            FinishVideo();
+        }
+
+        private void FinishVideo()
+        {
+            if (_recorder != null) _recorder.End();
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#endif
         }
 
         // ---------- Menü ----------
@@ -140,6 +207,7 @@ namespace HonkAndLoad.Gameplay
         private void Update()
         {
             PhaseTime += Time.deltaTime;
+            if (VideoMode) { VideoTime += Time.deltaTime; return; } // video modunda dokunma yok
             if (CurrentPhase == Phase.Playing) _idle += Time.deltaTime;
 #if ENABLE_LEGACY_INPUT_MANAGER
             // Android geri tuşu / Escape: oyundan giriş ekranına dön
