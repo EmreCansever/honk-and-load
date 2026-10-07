@@ -23,6 +23,11 @@ namespace HonkAndLoad.UI
         private GUIStyle _cardAdventure, _cardEndless, _cardTitle, _cardSub, _cardDesc, _badge, _bannerTitle, _bannerSub, _bigNumber;
         private Texture2D _barBack, _barFill, _bannerBack;
 
+        // Modern ana menü
+        private UiTextures _ui;
+        private Texture2D _menuBg, _shadow, _circle, _iconFlag, _iconInfinity, _iconPlay, _crateTile;
+        private GUIStyle _modeAdventure, _modeEndless, _modeTitle, _modeSub, _pillOn, _pillOff, _pillText, _link, _newBadge, _heroTitle, _heroTitleShadow;
+
         // Ortadaki duyuru ("Zorluk 3!", "Yeni Rekor!")
         private string _bannerText, _bannerSubText;
         private float _bannerStart = -10f;
@@ -111,6 +116,8 @@ namespace HonkAndLoad.UI
             _barFill = Tex(new Color(0.95f, 0.52f, 0.12f));
             _bannerBack = Tex(new Color(0.05f, 0.08f, 0.15f, 0.8f));
 
+            BuildMenuSkin();
+
             _popup = Text(58, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
             _bubble = Text(42, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.15f, 0.15f, 0.2f));
             _bubble.normal.background = Tex(new Color(1f, 1f, 1f, 0.95f));
@@ -121,6 +128,51 @@ namespace HonkAndLoad.UI
             _ringTex = ShapeTex(128, (u, v) => { float r = Mathf.Sqrt(u * u + v * v); return r < 0.95f && r > 0.72f; });
             _arrowTex = ShapeTex(64, (u, v) => (v < 0.9f && v > -0.1f && Mathf.Abs(u) < 0.22f)
                                               || (v <= -0.1f && v > -0.95f && Mathf.Abs(u) < (v + 0.95f) * 0.9f));
+        }
+
+        private void BuildMenuSkin()
+        {
+            _ui = new UiTextures();
+            _menuBg = _ui.VerticalGradient(new Color(0.42f, 0.75f, 1f), new Color(0.24f, 0.36f, 0.86f));
+            _shadow = _ui.SoftShadow();
+            _circle = _ui.Circle();
+            _iconFlag = _ui.Flag();
+            _iconInfinity = _ui.Infinity();
+            _iconPlay = _ui.Play();
+            _crateTile = _ui.RoundedFlat(Color.white, 64, 14);
+
+            var cardBorder = new RectOffset(44, 44, 44, 54);
+            _modeAdventure = CardStyle(_ui.RoundedCard(new Color(0.33f, 0.86f, 0.47f), new Color(0.11f, 0.62f, 0.33f)),
+                                       _ui.RoundedCard(new Color(0.22f, 0.72f, 0.38f), new Color(0.08f, 0.5f, 0.26f)), cardBorder);
+            _modeEndless = CardStyle(_ui.RoundedCard(new Color(1f, 0.70f, 0.25f), new Color(0.96f, 0.42f, 0.10f)),
+                                     _ui.RoundedCard(new Color(0.92f, 0.58f, 0.18f), new Color(0.84f, 0.34f, 0.06f)), cardBorder);
+
+            _modeTitle = Text(66, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
+            _modeSub = Text(40, FontStyle.Bold, TextAnchor.MiddleLeft, new Color(1f, 1f, 1f, 0.92f));
+            _heroTitle = Text(132, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _heroTitleShadow = Text(132, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.08f, 0.12f, 0.4f, 0.45f));
+
+            _pillOn = new GUIStyle { border = new RectOffset(48, 48, 48, 48) };
+            _pillOn.normal.background = _ui.Pill(new Color(1f, 1f, 1f, 0.95f));
+            _pillOn.active.background = _ui.Pill(new Color(0.85f, 0.88f, 0.95f, 0.95f));
+            _pillOff = new GUIStyle { border = new RectOffset(48, 48, 48, 48) };
+            _pillOff.normal.background = _ui.Pill(new Color(1f, 1f, 1f, 0.28f));
+            _pillOff.active.background = _ui.Pill(new Color(1f, 1f, 1f, 0.4f));
+            _pillText = Text(38, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+
+            _link = Text(32, FontStyle.Normal, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.75f));
+            _newBadge = Text(34, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _newBadge.normal.background = _ui.Pill(new Color(0.93f, 0.2f, 0.32f));
+            _newBadge.border = new RectOffset(48, 48, 48, 48);
+        }
+
+        private static GUIStyle CardStyle(Texture2D normal, Texture2D pressed, RectOffset border)
+        {
+            var s = new GUIStyle { border = border };
+            s.normal.background = normal;
+            s.hover.background = normal;
+            s.active.background = pressed;
+            return s;
         }
 
         private static GUIStyle Text(int size, FontStyle style, TextAnchor anchor, Color color)
@@ -408,82 +460,143 @@ namespace HonkAndLoad.UI
         private void DrawMenu(float w, float h)
         {
             Track(new Rect(0, 0, w, h));
-
-            float y = h * 0.12f;
-            GUI.Label(new Rect(0, y, w, 160), "Honk & Load!", _logo);
-            GUI.Label(new Rect(60, y + 170, w - 120, 70), "Kolileri yükle, kamyonları yolla!", _subtitle);
-
-            // Basit bir "logo": renkli koli sırası
-            float boxSize = 70f, gap = 18f;
-            float rowWidth = 5 * boxSize + 4 * gap;
             Color old = GUI.color;
-            for (int i = 0; i < 5; i++)
+            float t = Time.time;
+
+            // Arka plan: degrade + yavaşça süzülen soluk koliler
+            GUI.DrawTexture(new Rect(0, 0, w, h), _menuBg);
+            for (int i = 0; i < 9; i++)
             {
-                float bounce = Mathf.Abs(Mathf.Sin(Time.time * 3f + i * 0.6f)) * 10f;
-                GUI.color = Palette.Crate(i);
-                GUI.DrawTexture(new Rect((w - rowWidth) / 2 + i * (boxSize + gap), y + 280 - bounce, boxSize, boxSize), Texture2D.whiteTexture);
+                float speed = 18f + (i % 3) * 9f;
+                float size = 70f + (i * 37 % 60);
+                float x = (i * 131 % 1000) + 20f;
+                float y = h - ((t * speed + i * 260f) % (h + 300f)) + 150f;
+                Color c = Palette.Crate(i);
+                GUI.color = new Color(c.r, c.g, c.b, 0.22f);
+                Matrix4x4 m = GUI.matrix;
+                GUIUtility.RotateAroundPivot(t * (10f + i * 3f) + i * 40f, new Vector2((x + size / 2) * _scale, (y + size / 2) * _scale));
+                GUI.DrawTexture(new Rect(x, y, size, size), _crateTile);
+                GUI.matrix = m;
             }
             GUI.color = old;
 
-            // İki mod kartı: eşit boyut, yan yana
-            float cardGap = 40f, side = 100f;
-            float cw = (w - 2 * side - cardGap) / 2f, ch = 440f;
-            float cy = Mathf.Max(y + 420f, h * 0.40f);
-            Rect left = new Rect(side, cy, cw, ch);
-            Rect right = new Rect(side + cw + cardGap, cy, cw, ch);
+            // Başlık
+            float titleY = Mathf.Max(SafeTopInsetPixels() / _scale + 40f, h * 0.09f);
+            GUI.Label(new Rect(0, titleY + 10, w, 170), "Honk & Load!", _heroTitleShadow);
+            GUI.Label(new Rect(0, titleY, w, 170), "Honk & Load!", _heroTitle);
+            GUI.Label(new Rect(60, titleY + 165, w - 120, 60), "Kolileri yükle, kamyonları yolla!", _subtitle);
 
-            if (GUI.Button(left, GUIContent.none, _cardAdventure))
+            float boxSize = 58f, gap = 16f, rowWidth = 5 * boxSize + 4 * gap;
+            for (int i = 0; i < 5; i++)
+            {
+                float bounce = Mathf.Abs(Mathf.Sin(t * 3f + i * 0.6f)) * 12f;
+                GUI.color = Palette.Crate(i);
+                GUI.DrawTexture(new Rect((w - rowWidth) / 2 + i * (boxSize + gap), titleY + 250 - bounce, boxSize, boxSize), _crateTile);
+            }
+            GUI.color = old;
+
+            // Mod kartları: tam genişlik, alt alta, eşit önem
+            float side = 70f, cardW = w - 2 * side, cardH = 250f, cardGap = 44f;
+            float cy = Mathf.Max(titleY + 380f, h * 0.36f);
+
+            if (ModeCard(new Rect(side, cy, cardW, cardH), _modeAdventure, _iconFlag, "MACERA",
+                $"Bölüm {Progress.CurrentLevel}  ·  Devam et", new Color(0.11f, 0.62f, 0.33f), false))
             {
                 _confirmReset = false;
                 _game.Play();
             }
-            GUI.Label(new Rect(left.x, left.y + 60, left.width, 90), "MACERA", _cardTitle);
-            GUI.Label(new Rect(left.x, left.y + 170, left.width, 70), $"Bölüm {Progress.CurrentLevel}", _cardSub);
-            GUI.Label(new Rect(left.x + 20, left.y + 280, left.width - 40, 110), "Bölüm bölüm\nilerle", _cardDesc);
 
-            if (GUI.Button(right, GUIContent.none, _cardEndless))
+            int best = Progress.EndlessBest;
+            if (ModeCard(new Rect(side, cy + cardH + cardGap, cardW, cardH), _modeEndless, _iconInfinity, "SONSUZ",
+                best > 0 ? $"Rekor  {best}" : "Puan topla, rekor kır", new Color(0.96f, 0.42f, 0.10f), best == 0))
             {
                 _confirmReset = false;
                 _game.StartEndless();
             }
-            int best = Progress.EndlessBest;
-            GUI.Label(new Rect(right.x, right.y + 60, right.width, 90), "SONSUZ", _cardTitle);
-            GUI.Label(new Rect(right.x, right.y + 170, right.width, 70), best > 0 ? $"Rekor: {best}" : "Rekor yok", _cardSub);
-            GUI.Label(new Rect(right.x + 20, right.y + 280, right.width - 40, 110), "Puan topla,\nrekor kır", _cardDesc);
 
-            if (best == 0)
-            {
-                // Yeni modu öne çıkaran atan rozet
-                float pulse = 1f + 0.08f * Mathf.Sin(Time.time * 6f);
-                float bw2 = 150f * pulse, bh2 = 64f * pulse;
-                GUI.Label(new Rect(right.xMax - bw2 + 20, right.y - bh2 / 2, bw2, bh2), "YENİ!", _badge);
-            }
-
-            float bw = w - 2 * side, bx = side;
-            float by = cy + ch + 50f;
-            if (GUI.Button(new Rect(bx, by, bw / 2 - 12, 110), Progress.SoundOn ? "Ses: Açık" : "Ses: Kapalı", _secondary))
+            // Ayarlar: yuvarlak hap düğmeler
+            float py = cy + 2 * cardH + cardGap + 70f;
+            float pw = (cardW - 30f) / 2f, ph = 104f;
+            if (Pill(new Rect(side, py, pw, ph), Progress.SoundOn, Progress.SoundOn ? "Ses açık" : "Ses kapalı"))
             {
                 Progress.SoundOn = !Progress.SoundOn;
                 _game.ApplySettings();
             }
-            if (GUI.Button(new Rect(bx + bw / 2 + 12, by, bw / 2 - 12, 110), Progress.HapticsOn ? "Titreşim: Açık" : "Titreşim: Kapalı", _secondary))
+            if (Pill(new Rect(side + pw + 30f, py, pw, ph), Progress.HapticsOn, Progress.HapticsOn ? "Titreşim açık" : "Titreşim kapalı"))
             {
                 Progress.HapticsOn = !Progress.HapticsOn;
                 _game.ApplySettings();
             }
 
-            by += 150;
             if (Progress.CurrentLevel > 1)
             {
                 string text = _confirmReset ? "Emin misin? Tekrar dokun" : "İlerlemeyi sıfırla";
-                if (GUI.Button(new Rect(bx + bw / 4, by, bw / 2, 90), text, _secondary))
+                if (GUI.Button(new Rect(w / 2 - 250, py + ph + 40f, 500, 70), text, _link))
                 {
                     if (_confirmReset) { Progress.ResetLevels(); _confirmReset = false; }
                     else _confirmReset = true;
                 }
             }
 
-            GUI.Label(new Rect(0, h - 90, w, 60), Version, _small);
+            GUI.Label(new Rect(0, h - 80 - Screen.safeArea.y / _scale, w, 50), Version, _small);
+        }
+
+        /// <summary>Modern mod kartı: gölge, degrade, ikon dairesi, başlık, oynat düğmesi.</summary>
+        private bool ModeCard(Rect r, GUIStyle style, Texture2D icon, string title, string subtitle, Color accent, bool isNew)
+        {
+            Color old = GUI.color;
+
+            // Gölge
+            GUI.color = Color.white;
+            GUI.DrawTexture(new Rect(r.x - 14, r.y + 6, r.width + 28, r.height + 34), _shadow);
+
+            bool clicked = GUI.Button(r, GUIContent.none, style);
+
+            // Sol: ikon dairesi
+            float ic = 160f;
+            Rect circle = new Rect(r.x + 36, r.y + (r.height - 10 - ic) / 2f, ic, ic);
+            GUI.color = new Color(1f, 1f, 1f, 0.25f);
+            GUI.DrawTexture(circle, _circle);
+            GUI.color = Color.white;
+            float pad = 32f;
+            GUI.DrawTexture(new Rect(circle.x + pad, circle.y + pad, ic - 2 * pad, ic - 2 * pad), icon);
+
+            // Yazılar
+            float tx = circle.xMax + 34f;
+            GUI.Label(new Rect(tx, r.y + 42, r.width - (tx - r.x) - 150, 90), title, _modeTitle);
+            GUI.Label(new Rect(tx, r.y + 128, r.width - (tx - r.x) - 150, 60), subtitle, _modeSub);
+
+            // Sağ: beyaz daire içinde oynat üçgeni (hafif nabız)
+            float pulse = 1f + 0.04f * Mathf.Sin(Time.time * 4f);
+            float pc = 110f * pulse;
+            Rect play = new Rect(r.xMax - 40 - pc, r.y + (r.height - 10 - pc) / 2f, pc, pc);
+            GUI.color = Color.white;
+            GUI.DrawTexture(play, _circle);
+            GUI.color = accent;
+            float ip = pc * 0.3f;
+            GUI.DrawTexture(new Rect(play.x + ip + 4, play.y + ip, pc - 2 * ip, pc - 2 * ip), _iconPlay);
+
+            // Yeni rozeti
+            if (isNew)
+            {
+                float bp = 1f + 0.07f * Mathf.Sin(Time.time * 6f);
+                float bw = 150f * bp, bh = 62f * bp;
+                GUI.color = Color.white;
+                GUI.Label(new Rect(r.xMax - bw - 10, r.y - bh / 2, bw, bh), "YENİ!", _newBadge);
+            }
+
+            GUI.color = old;
+            return clicked;
+        }
+
+        private bool Pill(Rect r, bool on, string text)
+        {
+            bool clicked = GUI.Button(r, GUIContent.none, on ? _pillOn : _pillOff);
+            Color old = GUI.color;
+            _pillText.normal.textColor = on ? new Color(0.2f, 0.3f, 0.6f) : Color.white;
+            GUI.Label(r, (on ? "● " : "○ ") + text, _pillText);
+            GUI.color = old;
+            return clicked;
         }
 
         private void DrawTopBar(float w, float inset)
@@ -616,6 +729,7 @@ namespace HonkAndLoad.UI
             HudRects.Clear();
             IsVideo = false;
             foreach (Texture2D t in _textures) if (t != null) Destroy(t);
+            _ui?.Dispose();
         }
     }
 }
