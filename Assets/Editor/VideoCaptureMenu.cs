@@ -11,10 +11,20 @@ namespace HonkAndLoad.EditorTools
     {
         public const string RecordKey = "hal_record_video";
 
-        [MenuItem("Honk & Load/Reklam Videosu Kaydet")]
-        private static void Record()
+        // Senaryo numaraları GameController.VideoScenario ile aynı
+        [MenuItem("Honk & Load/Reklam: Sonsuz – Rekoru Geç")]
+        private static void RecordEndlessRecord() => Record(1);
+
+        [MenuItem("Honk & Load/Reklam: Sonsuz – Kaybetme")]
+        private static void RecordEndlessFail() => Record(2);
+
+        [MenuItem("Honk & Load/Reklam: Macera")]
+        private static void RecordAdventure() => Record(0);
+
+        private static void Record(int scenario)
         {
             if (EditorApplication.isPlaying) EditorApplication.isPlaying = false;
+            SessionState.SetInt("hal_video_scenario", scenario);
             SessionState.SetBool(RecordKey, true);
             EditorApplication.isPlaying = true;
         }
@@ -27,10 +37,11 @@ namespace HonkAndLoad.EditorTools
             EditorApplication.isPlaying = true;
         }
 
-        [MenuItem("Honk & Load/Video Modunu Kayıtsız Önizle")]
+        [MenuItem("Honk & Load/Video Önizle (Sonsuz – Rekor, kayıtsız)")]
         private static void Preview()
         {
             if (EditorApplication.isPlaying) EditorApplication.isPlaying = false;
+            SessionState.SetInt("hal_video_scenario", 1);
             SessionState.SetBool(RecordKey + "_preview", true);
             EditorApplication.isPlaying = true;
         }

@@ -51,6 +51,13 @@ namespace HonkAndLoad.Gameplay
         public const int VideoFps = 30;
         public bool VideoMode { get; private set; }
         public float VideoTime { get; private set; }
+
+        public enum VideoScenario { Adventure = 0, EndlessRecord = 1, EndlessFail = 2 }
+        public VideoScenario Scenario { get; private set; }
+        /// <summary>Kapanış kartı gösteriliyor mu, ne zamandır.</summary>
+        public bool VideoEnding { get; private set; }
+        public float VideoEndTime { get; private set; }
+        public int VideoFinalScore { get; private set; }
         private VideoRecorder _recorder;
 
         private struct Hint
@@ -99,7 +106,8 @@ namespace HonkAndLoad.Gameplay
             }
             if (record || preview)
             {
-                StartVideoMode(record);
+                var scenario = (VideoScenario)UnityEditor.SessionState.GetInt("hal_video_scenario", 0);
+                StartVideoMode(record, scenario);
                 return;
             }
 #endif
@@ -182,26 +190,192 @@ namespace HonkAndLoad.Gameplay
         // ---------- Reklam videosu ----------
 
         /// <summary>Arayüzsüz, kendi kendine oynayan mod. record=true ise kare kare kaydeder.</summary>
-        public void StartVideoMode(bool record)
+        public void StartVideoMode(bool record, VideoScenario scenario = VideoScenario.Adventure)
         {
             VideoMode = true;
             Hud.IsVideo = true;
+            Scenario = scenario;
             VideoTime = 0f;
+            VideoEnding = false;
             AudioListener.volume = 1f;
             if (record)
             {
                 string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Recordings",
-                    "ad_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss")));
+                    $"ad_{scenario}_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss")));
                 _recorder = gameObject.AddComponent<VideoRecorder>();
                 _recorder.Begin(folder, VideoFps);
             }
-            StartLevel(VideoLevel);
-            StartCoroutine(VideoBot());
+
+            switch (scenario)
+            {
+                case VideoScenario.EndlessRecord:
+                    StartEndless(4242);
+                    StartCoroutine(VideoBotEndlessRecord());
+                    break;
+                case VideoScenario.EndlessFail:
+                    StartEndless(1717);
+                    StartCoroutine(VideoBotEndlessFail());
+                    break;
+                default:
+                    StartLevel(VideoLevel);
+                    StartCoroutine(VideoBot());
+                    break;
+            }
         }
 
+        // --- Video botu yardımcıları ---
+
+        private int DirectColumn()
+        {
+            for (int c = 0; c < State.Columns.Count; c++)
+            {
+                int f = State.FrontCrate(c);
+                if (f >= 0 && State.FindDockFor(f) >= 0) return c;
+            }
+            return -1;
+        }
+
+        private int CountDirect(int except)
+        {
+            int n = 0;
+            for (int c = 0; c < State.Columns.Count; c++)
+            {
+                if (c == except) continue;
+                int f = State.FrontCrate(c);
+                if (f >= 0 && State.FindDockFor(f) >= 0) n++;
+            }
+            return n;
+        }
+
+        private IEnumerator BotTap(int column)
+        {
+            if (column < 0 || State == null) yield break;
+            _hud.ShowTap(_view.ColumnFrontWorld(column));
+            yield return new WaitForSeconds(0.1f);
+            if (CurrentPhase == Phase.Playing) HandleColumnTap(column);
+        }
+
+        private int _bufferPeakShown;
+
+        /// <summary>Raf doluluğuna göre altyazılar: "Raf doluyor!", "Son 1 yer!", "Kurtuldu!".</summary>
+        private void VideoCaptions()
+        {
+            if (State == null) return;
+            int used = State.BufferUsed(), size = State.Buffer.Length;
+            if (used >= size - 1 && _bufferPeakShown < 2) { _hud.Caption("Son 1 yer!", new Color(1f, 0.35f, 0.3f)); _bufferPeakShown = 2; }
+            else if (used >= size - 2 && _bufferPeakShown < 1) { _hud.Caption("Raf doluyor!", Palette.Warning); _bufferPeakShown = 1; }
+            else if (used <= 1 && _bufferPeakShown >= 1)
+            {
+                _hud.Caption("Kurtuldu!", new Color(0.45f, 1f, 0.55f));
+                _bufferPeakShown = 0;
+            }
+        }
+
+        private IEnumerator EndCard(float seconds)
+        {
+            VideoFinalScore = Endless != null ? Endless.Score : 0;
+            VideoEnding = true;
+            VideoEndTime = 0f;
+            yield return new WaitForSeconds(seconds);
+            FinishVideo();
+        }
+
+        /// <summary>Sonsuz – "Rekoru geç": hızlı oyun, gerilim, kurtuluş, skorla kapanış (~22 sn).</summary>
+        private IEnumerator VideoBotEndlessRecord()
+        {
+            var rng = new System.Random(11);
+            _bufferPeakShown = 0;
+            yield return new WaitForSeconds(1.6f);
+
+            // 1) Akıcı, kombolu oyun
+            while (CurrentPhase == Phase.Playing && VideoTime < 9.0f)
+            {
+                yield return BotTap(LevelSolver.CarefulChoice(State, rng));
+                VideoCaptions();
+                yield return new WaitForSeconds(0.22f + (float)rng.NextDouble() * 0.1f);
+            }
+
+            // 2) Gerilim: sıradaki kamyonların kolilerini bilerek rafa koy
+            while (CurrentPhase == Phase.Playing && VideoTime < 14.5f
+                   && State.BufferUsed() < State.Buffer.Length - 1)
+            {
+                var upcoming = Endless.PeekUpcoming(2);
+                int pick = -1;
+                for (int c = 0; c < State.Columns.Count && pick < 0; c++)
+                {
+                    int f = State.FrontCrate(c);
+                    if (f < 0 || State.FindDockFor(f) >= 0) continue;
+                    if (!upcoming.Contains(f)) continue;
+                    bool last = State.BufferUsed() == State.Buffer.Length - 2;
+                    if (last && CountDirect(c) == 0) continue; // son yeri doldurup kilitlenme
+                    pick = c;
+                }
+                if (pick < 0) pick = DirectColumn();
+                if (pick < 0) break;
+                yield return BotTap(pick);
+                VideoCaptions();
+                yield return new WaitForSeconds(0.5f);
+            }
+
+            // 3) Kurtuluş: doğrudan yüklemelerle kamyonları gönder, raf kendiliğinden boşalsın
+            while (CurrentPhase == Phase.Playing && VideoTime < 20.5f)
+            {
+                int c = DirectColumn();
+                if (c < 0)
+                {
+                    if (State.BufferUsed() >= State.Buffer.Length - 1) break; // kaybetmemek için dur
+                    c = LevelSolver.CarefulChoice(State, rng);
+                }
+                yield return BotTap(c);
+                VideoCaptions();
+                yield return new WaitForSeconds(0.25f + (float)rng.NextDouble() * 0.1f);
+            }
+
+            yield return new WaitForSeconds(0.6f);
+            yield return EndCard(3.8f);
+        }
+
+        /// <summary>Sonsuz – "Kaybetme": iyi başlar, dikkatsiz dokunuşlarla raf dolar (~15 sn).</summary>
+        private IEnumerator VideoBotEndlessFail()
+        {
+            var rng = new System.Random(5);
+            _bufferPeakShown = 0;
+            yield return new WaitForSeconds(1.6f);
+
+            while (CurrentPhase == Phase.Playing && VideoTime < 6.5f)
+            {
+                yield return BotTap(LevelSolver.CarefulChoice(State, rng));
+                yield return new WaitForSeconds(0.25f);
+            }
+
+            // Dikkatsiz dokunuşlar: uymayan kolileri rafa at
+            while (CurrentPhase == Phase.Playing && VideoTime < 25f)
+            {
+                int pick = -1;
+                for (int c = 0; c < State.Columns.Count; c++)
+                {
+                    int f = State.FrontCrate(c);
+                    if (f >= 0 && State.FindDockFor(f) < 0) { pick = c; break; }
+                }
+                if (pick < 0) pick = DirectColumn();
+                bool lastSlot = State.BufferUsed() == State.Buffer.Length - 1;
+                if (lastSlot) yield return new WaitForSeconds(0.9f); // son dokunuştan önce gerilim
+                yield return BotTap(pick);
+                VideoCaptions();
+                if (CurrentPhase != Phase.Playing) break;
+                yield return new WaitForSeconds(0.55f);
+            }
+
+            _hud.Caption("RAF DOLDU!", new Color(1f, 0.3f, 0.3f));
+            yield return new WaitForSeconds(1.4f);
+            yield return EndCard(3.6f);
+        }
+
+        /// <summary>Macera: zor bölüm, altyazılar, konvoyla kapanış.</summary>
         private IEnumerator VideoBot()
         {
             var rng = new System.Random(7);
+            _bufferPeakShown = 0;
             yield return new WaitForSeconds(1.8f); // açılış sorusu okunsun
 
             int safety = 0;
@@ -211,6 +385,7 @@ namespace HonkAndLoad.Gameplay
                 yield return new WaitForSeconds(0.1f);
                 if (_hint.Kind == Tappable.TapKind.Column) HandleColumnTap(_hint.Index);
                 else HandleBufferTap(_hint.Index);
+                VideoCaptions();
                 yield return new WaitForSeconds(0.26f + (float)rng.NextDouble() * 0.14f);
             }
 
@@ -283,13 +458,15 @@ namespace HonkAndLoad.Gameplay
         // ---------- Sonsuz mod ----------
 
         /// <summary>Giriş ekranındaki "Sonsuz" kartı ve oyun sonu "Tekrar Oyna".</summary>
-        public void StartEndless()
+        public void StartEndless() => StartEndless(System.Environment.TickCount);
+
+        public void StartEndless(int seed)
         {
             SaveEndlessBest();
             StopAllCoroutines();
             Mode = GameMode.Endless;
             LevelNumber = 0; // öğretici açılmasın
-            Endless = new EndlessDirector(System.Environment.TickCount);
+            Endless = new EndlessDirector(seed);
             State = Endless.CreateBoard();
             RecordAtStart = Progress.EndlessBest;
             NewRecord = false;
@@ -306,6 +483,7 @@ namespace HonkAndLoad.Gameplay
 
         private void SaveEndlessBest()
         {
+            if (VideoMode) return; // reklam kaydı oyuncunun rekorunu değiştirmesin
             if (Mode != GameMode.Endless || Endless == null) return;
             if (Endless.Score > Progress.EndlessBest)
             {
@@ -330,7 +508,7 @@ namespace HonkAndLoad.Gameplay
                 _hud.Banner($"Zorluk {e.NewTier + 1}!", e.NewTier % 2 == 0 ? "Yeni bir renk geldi!" : "Koliler daha karışık geliyor");
                 StartCoroutine(Delayed(0.2f, _feedback.TruckDeparts));
             }
-            if (!NewRecord && RecordAtStart > 0 && Endless.Score > RecordAtStart)
+            if (!VideoMode && !NewRecord && RecordAtStart > 0 && Endless.Score > RecordAtStart)
             {
                 NewRecord = true;
                 _hud.Banner("Yeni Rekor!", $"{Endless.Score} puan");
@@ -362,7 +540,12 @@ namespace HonkAndLoad.Gameplay
         private void Update()
         {
             PhaseTime += Time.deltaTime;
-            if (VideoMode) { VideoTime += Time.deltaTime; return; } // video modunda dokunma yok
+            if (VideoMode)
+            {
+                VideoTime += Time.deltaTime;
+                if (VideoEnding) VideoEndTime += Time.deltaTime;
+                return; // video modunda dokunma yok
+            }
             if (CurrentPhase == Phase.Playing) _idle += Time.deltaTime;
 #if ENABLE_LEGACY_INPUT_MANAGER
             // Android geri tuşu / Escape: oyundan giriş ekranına dön
@@ -611,6 +794,8 @@ namespace HonkAndLoad.Gameplay
             // oyun alanı kalan banda sığdırılır.
             float topFrac = Mathf.Clamp(Hud.TopReservedPixels() / Screen.height, 0f, 0.4f);
             float bottomFrac = Mathf.Clamp(Screen.safeArea.y / Screen.height + 0.02f, 0f, 0.2f);
+            // Reklam videosu: Instagram/Shorts alt %20'sini açıklama ve butonlar kaplar
+            if (VideoMode) bottomFrac = Mathf.Max(bottomFrac, 0.15f);
             float band = 1f - topFrac - bottomFrac;
 
             float halfHeight = (maxU - minU) / 2f;

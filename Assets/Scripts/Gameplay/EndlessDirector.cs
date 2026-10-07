@@ -107,6 +107,15 @@ namespace HonkAndLoad.Gameplay
             return color;
         }
 
+        /// <summary>Sıradaki n kamyonun rengi (reklam videosu botu için).</summary>
+        public List<int> PeekUpcoming(int n)
+        {
+            while (_upcomingTrucks.Count < n) GenerateTruck();
+            var list = new List<int>(_upcomingTrucks);
+            if (list.Count > n) list.RemoveRange(n, list.Count - n);
+            return list;
+        }
+
         private int NextTruckColor()
         {
             while (_upcomingTrucks.Count == 0) GenerateTruck();

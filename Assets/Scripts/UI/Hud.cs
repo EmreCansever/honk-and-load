@@ -49,6 +49,22 @@ namespace HonkAndLoad.UI
         private GUIStyle _popup, _bubble, _hook, _cta, _smallLogo;
         private Texture2D _ringTex, _arrowTex, _dotTex;
 
+        // Video altyazısı (ses kapalı izleyenler için)
+        private string _captionText;
+        private Color _captionColor;
+        private float _captionStart = -10f;
+        private const float CaptionLife = 1.3f;
+        private GUIStyle _caption, _scoreBig, _scoreLabel;
+        private int _lastScore;
+        private float _scorePop = -10f;
+
+        public void Caption(string text, Color color)
+        {
+            _captionText = text;
+            _captionColor = color;
+            _captionStart = Time.time;
+        }
+
         // Video modunda dokunma işareti
         private Vector3 _tapWorld;
         private float _tapTime = -10f;
@@ -69,8 +85,9 @@ namespace HonkAndLoad.UI
         public static float TopReservedPixels()
         {
             float scale = Screen.width / DesignWidth;
-            // Video modunda üstte açılış sorusu / logo için daha geniş boşluk
-            float reserved = IsVideo ? 330f : TopBarHeight + 140f; // bar + zorluk çubuğu + "Raf dolmak üzere" yazısı
+            // Video modunda üst %27: Instagram/Shorts başlığı + açılış sorusu + skor
+            if (IsVideo) return SafeTopInsetPixels() + Screen.height * 0.24f;
+            float reserved = TopBarHeight + 140f; // bar + zorluk çubuğu + "Raf dolmak üzere" yazısı
             return SafeTopInsetPixels() + reserved * scale;
         }
 
@@ -311,14 +328,20 @@ namespace HonkAndLoad.UI
             {
                 _cta = new GUIStyle(_button) { fontSize = 76 };
                 _smallLogo = Text(70, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+                _caption = Text(104, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+                _scoreBig = Text(150, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+                _scoreLabel = Text(46, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.85f));
             }
             DrawPopups();
+            DrawBanner(w, h);
             Color old = GUI.color;
+            GameController.VideoScenario sc = _game.Scenario;
+            bool endless = sc != GameController.VideoScenario.Adventure;
 
             // Dokunma işareti: büzülen halka + nokta
             float age = Time.time - _tapTime;
             Camera cam = Camera.main;
-            if (age < 0.45f && cam != null)
+            if (age < 0.45f && cam != null && !_game.VideoEnding)
             {
                 Vector3 sp = cam.WorldToScreenPoint(_tapWorld);
                 float x = sp.x / _scale, y = (Screen.height - sp.y) / _scale;
@@ -330,47 +353,112 @@ namespace HonkAndLoad.UI
                 GUI.DrawTexture(new Rect(x - 45, y - 45, 90, 90), _dotTex);
             }
 
-            // Açılış sorusu
+            // Üst bölge (Instagram/Shorts başlığının altında): önce soru, sonra skor
             float t = _game.VideoTime;
-            if (t < 3.2f)
+            float topY = SafeTopInsetPixels() / _scale + h * 0.095f;
+            string hook = sc == GameController.VideoScenario.EndlessRecord ? "Rekorumu\ngeçebilir misin?"
+                        : sc == GameController.VideoScenario.EndlessFail ? "Raf dolarsa\nkaybedersin!"
+                        : "Bu depoyu\nboşaltabilir misin?";
+            if (t < 3.0f)
             {
-                float a = t < 0.25f ? t / 0.25f : t > 2.7f ? (3.2f - t) / 0.5f : 1f;
-                float y = SafeTopInsetPixels() / _scale + 70f;
-                ShadowLabel(new Rect(40, y, w - 80, 230), "Bu depoyu\nboşaltabilir misin?", _hook, a);
+                float a = t < 0.25f ? t / 0.25f : t > 2.5f ? (3.0f - t) / 0.5f : 1f;
+                ShadowLabel(new Rect(40, topY, w - 80, 230), hook, _hook, a);
             }
-            else if (_game.CurrentPhase == GameController.Phase.Playing || _game.PhaseTime < 1.9f)
+            else if (!_game.VideoEnding && !(_game.CurrentPhase == GameController.Phase.Won && _game.PhaseTime > 1.9f))
             {
-                // Soru kaybolunca üstte küçük oyun adı kalsın
-                float a = Mathf.Clamp01((t - 3.2f) / 0.4f);
-                float y = SafeTopInsetPixels() / _scale + 110f;
-                ShadowLabel(new Rect(40, y, w - 80, 120), "Honk & Load!", _smallLogo, a);
+                float a = Mathf.Clamp01((t - 3.0f) / 0.3f);
+                if (endless && _game.Endless != null)
+                {
+                    int score = _game.Endless.Score;
+                    if (score != _lastScore) { _lastScore = score; _scorePop = Time.time; }
+                    float pk = Mathf.Clamp01((Time.time - _scorePop) / 0.18f);
+                    float pop = 1f + 0.15f * Mathf.Sin(pk * Mathf.PI);
+                    ShadowLabel(new Rect(40, topY, w - 80, 60), "SKOR", _scoreLabel, a);
+                    Matrix4x4 m = GUI.matrix;
+                    GUIUtility.ScaleAroundPivot(Vector2.one * pop, new Vector2(w / 2 * _scale, (topY + 140) * _scale));
+                    ShadowLabel(new Rect(40, topY + 60, w - 80, 170), score.ToString("N0"), _scoreBig, a);
+                    GUI.matrix = m;
+                }
+                else
+                {
+                    ShadowLabel(new Rect(40, topY + 40, w - 80, 120), "Honk & Load!", _smallLogo, a);
+                }
             }
 
-            // Kapanış ekranı
-            if (_game.CurrentPhase == GameController.Phase.Won && _game.PhaseTime > 1.9f)
+            // Altyazı: tahtanın ortasında büyük, patlayarak çıkar
+            float ca = Time.time - _captionStart;
+            if (ca < CaptionLife && !string.IsNullOrEmpty(_captionText) && !_game.VideoEnding)
             {
-                float k = Mathf.Clamp01((_game.PhaseTime - 1.9f) / 0.4f);
-                GUI.color = new Color(0.06f, 0.1f, 0.2f, 0.82f * k);
-                GUI.DrawTexture(new Rect(0, 0, w, h), Texture2D.whiteTexture);
+                float a = ca > CaptionLife - 0.3f ? (CaptionLife - ca) / 0.3f : 1f;
+                float pop = ca < 0.15f ? Mathf.Lerp(0.6f, 1.12f, ca / 0.15f) : Mathf.Lerp(1.12f, 1f, Mathf.Clamp01((ca - 0.15f) / 0.15f));
+                Rect r = new Rect(20, h * 0.56f, w - 40, 160);
+                Matrix4x4 m = GUI.matrix;
+                GUIUtility.ScaleAroundPivot(Vector2.one * pop, new Vector2(w / 2 * _scale, (r.y + 80) * _scale));
+                Color oc = _caption.normal.textColor;
+                // Kalın kontur: 8 yönde koyu kopya
+                GUI.color = new Color(0f, 0f, 0f, 0.8f * a);
+                for (int i = 0; i < 8; i++)
+                {
+                    float ang = i * Mathf.PI / 4f;
+                    GUI.Label(new Rect(r.x + Mathf.Cos(ang) * 6f, r.y + Mathf.Sin(ang) * 6f, r.width, r.height), _captionText, _caption);
+                }
+                _caption.normal.textColor = _captionColor;
+                GUI.color = new Color(1f, 1f, 1f, a);
+                GUI.Label(r, _captionText, _caption);
+                _caption.normal.textColor = oc;
+                GUI.matrix = m;
+            }
+
+            // Kapanış kartı
+            bool adventureEnd = sc == GameController.VideoScenario.Adventure
+                                && _game.CurrentPhase == GameController.Phase.Won && _game.PhaseTime > 1.9f;
+            if (adventureEnd || _game.VideoEnding)
+            {
+                float since = adventureEnd ? _game.PhaseTime - 1.9f : _game.VideoEndTime;
+                float k = Mathf.Clamp01(since / 0.4f);
                 GUI.color = new Color(1f, 1f, 1f, k);
+                GUI.DrawTexture(new Rect(0, 0, w, h), _menuBg);
+                GUI.color = new Color(0.04f, 0.08f, 0.25f, 0.35f * k);
+                GUI.DrawTexture(new Rect(0, 0, w, h), Texture2D.whiteTexture);
 
-                float y = h * 0.22f;
-                GUI.Label(new Rect(0, y, w, 160), "Honk & Load!", _logo);
-                GUI.Label(new Rect(60, y + 170, w - 120, 70), "Kolileri yükle, kamyonları yolla!", _subtitle);
+                GUI.color = new Color(1f, 1f, 1f, k);
+                float y = h * 0.14f;
+                GUI.Label(new Rect(0, y + 10, w, 170), "Honk & Load!", _heroTitleShadow);
+                GUI.Label(new Rect(0, y, w, 170), "Honk & Load!", _heroTitle);
 
-                float boxSize = 70f, gap = 18f, rowWidth = 5 * boxSize + 4 * gap;
+                float boxSize = 64f, gap = 18f, rowWidth = 5 * boxSize + 4 * gap;
                 for (int i = 0; i < 5; i++)
                 {
-                    float bounce = Mathf.Abs(Mathf.Sin(_game.PhaseTime * 5f + i * 0.6f)) * 20f;
+                    float bounce = Mathf.Abs(Mathf.Sin(since * 5f + i * 0.6f)) * 18f;
                     Color c = Palette.Crate(i);
                     GUI.color = new Color(c.r, c.g, c.b, k);
-                    GUI.DrawTexture(new Rect((w - rowWidth) / 2 + i * (boxSize + gap), y + 290 - bounce, boxSize, boxSize), Texture2D.whiteTexture);
+                    GUI.DrawTexture(new Rect((w - rowWidth) / 2 + i * (boxSize + gap), y + 200 - bounce, boxSize, boxSize), _crateTile);
+                }
+                GUI.color = new Color(1f, 1f, 1f, k);
+
+                float my = h * 0.33f;
+                if (sc == GameController.VideoScenario.EndlessRecord)
+                {
+                    GUI.Label(new Rect(0, my, w, 60), "SKORUM", _scoreLabel);
+                    GUI.Label(new Rect(0, my + 60, w, 180), _game.VideoFinalScore.ToString("N0"), _scoreBig);
+                    Color oc = _hook.normal.textColor;
+                    _hook.normal.textColor = Palette.Warning;
+                    GUI.Label(new Rect(40, my + 250, w - 80, 120), "Geçebilir misin?", _hook);
+                    _hook.normal.textColor = oc;
+                }
+                else if (sc == GameController.VideoScenario.EndlessFail)
+                {
+                    ShadowLabel(new Rect(40, my + 30, w - 80, 260), "Sen olsan\nhangisine dokunurdun?", _hook, k);
+                }
+                else
+                {
+                    GUI.Label(new Rect(60, my + 60, w - 120, 80), "Kolileri yükle, kamyonları yolla!", _subtitle);
                 }
 
-                float pulse = 1f + 0.05f * Mathf.Sin(_game.PhaseTime * 7f);
+                float pulse = 1f + 0.05f * Mathf.Sin(since * 7f);
                 float bw = (w - 240) * pulse, bh = 170 * pulse;
                 GUI.color = new Color(1f, 1f, 1f, k);
-                GUI.Label(new Rect((w - bw) / 2, h * 0.6f - bh / 2, bw, bh), "Ücretsiz Oyna!", _cta);
+                GUI.Label(new Rect((w - bw) / 2, h * 0.62f - bh / 2, bw, bh), "Ücretsiz Oyna!", _cta);
             }
             GUI.color = old;
         }
