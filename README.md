@@ -16,6 +16,14 @@ Renkli kolileri doğru kamyona yükleyip sıkışan depoyu boşalttığın, tek 
 5. **Kazanma:** Tüm koliler yüklendi. **Kaybetme:** Raf doldu ve yapılacak hamle kalmadı.
 6. Raf 5 slotla başlar, her 15 bölümde bir slot artar (en fazla 8).
 
+## Modlar
+
+- **Macera:** Bölüm bölüm ilerleme (yukarıdaki kurallar).
+- **Sonsuz:** Bölüm yok. Sütunlardan koli alındıkça arkadan yenisi gelir; raf dolup hamle kalmayınca oyun biter. En yüksek skor ana menüde görünür.
+  - Puan: depodan kamyona 10 (art arda yüklemelerde kombo çarpanı, en fazla x2), raftan kamyona 5, dolan kamyon +30, 3 koli art arda aynı kamyona **Mükemmel** +50.
+  - Zorluk kademeleri: 300, 800, 1500, 2400, 3500, 4800, 6300, 8000 puan, sonra her 2000 puanda bir. Her kademede koliler daha karışık gelir, her iki kademede bir yeni renk eklenir (4 → 8 renk).
+  - Adalet: her kamyon için tam 3 koli üretilir; koliler kamyonların geliş sırasına göre gelir (`EndlessDirector`).
+
 ## Projeyi açma
 
 1. Unity Hub → **Add → Add project from disk** → bu klasörü seç.

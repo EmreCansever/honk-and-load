@@ -219,6 +219,17 @@ namespace HonkAndLoad.Gameplay
                 List<Transform> col = _columns[move.FromColumn];
                 crate = col[col.Count - 1];
                 col.RemoveAt(col.Count - 1);
+
+                // Sonsuz mod: sütunun arkasından yeni koli gelir
+                if (move.RefillColor >= 0)
+                {
+                    Transform fresh = MakeCrate(move.RefillColor, _root);
+                    fresh.localScale = Vector3.zero;
+                    fresh.localPosition = ColumnSlot(move.FromColumn, col.Count + 1) + Vector3.down * 0.3f;
+                    SetTappable(fresh.gameObject, Tappable.TapKind.Column, move.FromColumn);
+                    col.Insert(0, fresh);
+                    StartCoroutine(PopIn(fresh, CrateSize, 0.2f));
+                }
                 // Kalan koliler öne kayar
                 for (int i = 0; i < col.Count; i++)
                     StartMove(col[i], ColumnSlot(move.FromColumn, col.Count - 1 - i), 0.15f, 0f);
@@ -400,6 +411,20 @@ namespace HonkAndLoad.Gameplay
                 yield return null;
             }
             if (t != null) t.localPosition = target;
+        }
+
+        private static IEnumerator PopIn(Transform t, float size, float duration)
+        {
+            float elapsed = 0f;
+            while (elapsed < duration && t != null)
+            {
+                elapsed += Time.deltaTime;
+                float k = Mathf.Clamp01(elapsed / duration);
+                float overshoot = 1f + 0.15f * Mathf.Sin(k * Mathf.PI);
+                t.localScale = Vector3.one * size * k * overshoot;
+                yield return null;
+            }
+            if (t != null) t.localScale = Vector3.one * size;
         }
 
         private static IEnumerator Squash(Transform t, float delay)

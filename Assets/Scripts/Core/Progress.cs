@@ -9,6 +9,7 @@ namespace HonkAndLoad.Core
         private const string SoundKey = "hal_sound";
         private const string HapticsKey = "hal_haptics";
         private const string TutorialKey = "hal_tutorial_done";
+        private const string EndlessBestKey = "hal_endless_best";
 
         public static int CurrentLevel
         {
@@ -26,6 +27,13 @@ namespace HonkAndLoad.Core
         {
             get => PlayerPrefs.GetInt(HapticsKey, 1) == 1;
             set { PlayerPrefs.SetInt(HapticsKey, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>Sonsuz modda en yüksek skor.</summary>
+        public static int EndlessBest
+        {
+            get => PlayerPrefs.GetInt(EndlessBestKey, 0);
+            set { PlayerPrefs.SetInt(EndlessBestKey, Mathf.Max(0, value)); PlayerPrefs.Save(); }
         }
 
         /// <summary>Öğretici (1. bölüm) bir kez tamamlandı mı?</summary>

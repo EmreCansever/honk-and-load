@@ -27,6 +27,7 @@ namespace HonkAndLoad.Gameplay
         public int SlotInTruck = -1;  // kamyondaki kaçıncı yer
         public bool TruckDeparted;    // kamyon doldu ve gitti mi
         public Truck ArrivedTruck;    // yerine gelen kamyon (yoksa null)
+        public int RefillColor = -1;  // sonsuz mod: sütunun arkasına gelen yeni koli
     }
 
     /// <summary>
@@ -42,6 +43,14 @@ namespace HonkAndLoad.Gameplay
         public int TruckCapacity { get; private set; }
         public int TotalTrucks { get; private set; }
         public int DepartedTrucks { get; private set; }
+
+        /// <summary>Sonsuz mod: bir sütundan koli alınınca arkasına eklenecek koliyi verir.</summary>
+        public System.Func<int, int> Refill;
+
+        /// <summary>Sonsuz mod: sıra boşalınca yeni kamyon rengini verir.</summary>
+        public System.Func<int> TruckSupplier;
+
+        public bool IsEndless => Refill != null;
 
         private BoardState() { }
 
@@ -59,8 +68,12 @@ namespace HonkAndLoad.Gameplay
             for (int i = 0; i < Buffer.Length; i++) Buffer[i] = -1;
         }
 
-        private Truck NextTruck() =>
-            TruckQueue.Count > 0 ? new Truck(TruckQueue.Dequeue(), TruckCapacity) : null;
+        private Truck NextTruck()
+        {
+            if (TruckQueue.Count > 0) return new Truck(TruckQueue.Dequeue(), TruckCapacity);
+            if (TruckSupplier != null) return new Truck(TruckSupplier(), TruckCapacity);
+            return null;
+        }
 
         // ---------- Sorgular ----------
 
@@ -105,6 +118,7 @@ namespace HonkAndLoad.Gameplay
 
         public bool IsWon()
         {
+            if (IsEndless) return false;
             foreach (List<int> c in Columns) if (c.Count > 0) return false;
             foreach (int b in Buffer) if (b >= 0) return false;
             return true;
@@ -130,6 +144,11 @@ namespace HonkAndLoad.Gameplay
             col.RemoveAt(col.Count - 1);
 
             var result = new MoveResult { Color = color, FromColumn = column };
+            if (Refill != null)
+            {
+                result.RefillColor = Refill(column);
+                col.Insert(0, result.RefillColor); // arkaya (listenin başı) eklenir
+            }
             int dock = FindDockFor(color);
             if (dock >= 0) LoadInto(dock, result);
             else

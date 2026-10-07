@@ -20,6 +20,13 @@ namespace HonkAndLoad.UI
         private float _scale = 1f;
         private bool _confirmReset;
         private GUIStyle _logo, _subtitle, _title, _label, _small, _button, _secondary, _panel;
+        private GUIStyle _cardAdventure, _cardEndless, _cardTitle, _cardSub, _cardDesc, _badge, _bannerTitle, _bannerSub, _bigNumber;
+        private Texture2D _barBack, _barFill, _bannerBack;
+
+        // Ortadaki duyuru ("Zorluk 3!", "Yeni Rekor!")
+        private string _bannerText, _bannerSubText;
+        private float _bannerStart = -10f;
+        private const float BannerLife = 1.8f;
         private readonly List<Texture2D> _textures = new List<Texture2D>();
 
         // Uçan yazılar ("x3 Kombo!", "Teslim!")
@@ -58,7 +65,7 @@ namespace HonkAndLoad.UI
         {
             float scale = Screen.width / DesignWidth;
             // Video modunda üstte açılış sorusu / logo için daha geniş boşluk
-            float reserved = IsVideo ? 330f : TopBarHeight + 90f; // bar + "Raf dolmak üzere" yazısı
+            float reserved = IsVideo ? 330f : TopBarHeight + 140f; // bar + zorluk çubuğu + "Raf dolmak üzere" yazısı
             return SafeTopInsetPixels() + reserved * scale;
         }
 
@@ -88,6 +95,21 @@ namespace HonkAndLoad.UI
 
             _panel = new GUIStyle(GUI.skin.box);
             _panel.normal.background = Tex(new Color(0f, 0f, 0f, 0.55f));
+
+            // Ana menü mod kartları: iki mod eşit büyüklükte, farklı renkte
+            _cardAdventure = ButtonStyle(new Color(0.15f, 0.65f, 0.35f), 40);
+            _cardEndless = ButtonStyle(new Color(0.95f, 0.52f, 0.12f), 40);
+            _cardTitle = Text(62, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _cardSub = Text(44, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _cardDesc = Text(32, FontStyle.Normal, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.9f));
+            _badge = Text(34, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _badge.normal.background = Tex(new Color(0.9f, 0.2f, 0.25f));
+            _bannerTitle = Text(84, FontStyle.Bold, TextAnchor.MiddleCenter, Palette.Warning);
+            _bannerSub = Text(40, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _bigNumber = Text(56, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
+            _barBack = Tex(new Color(0f, 0f, 0f, 0.35f));
+            _barFill = Tex(new Color(0.95f, 0.52f, 0.12f));
+            _bannerBack = Tex(new Color(0.05f, 0.08f, 0.15f, 0.8f));
 
             _popup = Text(58, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
             _bubble = Text(42, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.15f, 0.15f, 0.2f));
@@ -155,6 +177,32 @@ namespace HonkAndLoad.UI
         }
 
         // ---------- Uçan yazılar ----------
+
+        /// <summary>Ekranın ortasında kısa duyuru.</summary>
+        public void Banner(string title, string subtitle)
+        {
+            _bannerText = title;
+            _bannerSubText = subtitle;
+            _bannerStart = Time.time;
+        }
+
+        private void DrawBanner(float w, float h)
+        {
+            float age = Time.time - _bannerStart;
+            if (age > BannerLife || string.IsNullOrEmpty(_bannerText)) return;
+            float a = age < 0.15f ? age / 0.15f : age > BannerLife - 0.4f ? (BannerLife - age) / 0.4f : 1f;
+            float pop = age < 0.2f ? Mathf.Lerp(0.7f, 1.08f, age / 0.2f) : Mathf.Lerp(1.08f, 1f, Mathf.Clamp01((age - 0.2f) / 0.2f));
+            Rect r = new Rect(60, h * 0.36f, w - 120, 230);
+            Matrix4x4 m = GUI.matrix;
+            GUIUtility.ScaleAroundPivot(Vector2.one * pop, new Vector2((r.x + r.width / 2) * _scale, (r.y + r.height / 2) * _scale));
+            Color old = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, a);
+            GUI.DrawTexture(r, _bannerBack);
+            GUI.Label(new Rect(r.x, r.y + 20, r.width, 120), _bannerText, _bannerTitle);
+            GUI.Label(new Rect(r.x, r.y + 140, r.width, 60), _bannerSubText, _bannerSub);
+            GUI.color = old;
+            GUI.matrix = m;
+        }
 
         public void Popup(string text, Vector3 world, Color color, float delay)
         {
@@ -351,6 +399,7 @@ namespace HonkAndLoad.UI
             DrawTopBar(w, inset);
             DrawHint(w, h);
             DrawPopups();
+            DrawBanner(w, h);
             // Kazanınca önce konvoy ve konfeti oynasın, panel biraz sonra gelsin
             if (_game.CurrentPhase == GameController.Phase.Won && _game.PhaseTime > 1.6f) DrawWin(w, h);
             else if (_game.CurrentPhase == GameController.Phase.Lost && _game.PhaseTime > 0.4f) DrawLose(w, h);
@@ -360,7 +409,7 @@ namespace HonkAndLoad.UI
         {
             Track(new Rect(0, 0, w, h));
 
-            float y = h * 0.16f;
+            float y = h * 0.12f;
             GUI.Label(new Rect(0, y, w, 160), "Honk & Load!", _logo);
             GUI.Label(new Rect(60, y + 170, w - 120, 70), "Kolileri yükle, kamyonları yolla!", _subtitle);
 
@@ -370,20 +419,48 @@ namespace HonkAndLoad.UI
             Color old = GUI.color;
             for (int i = 0; i < 5; i++)
             {
+                float bounce = Mathf.Abs(Mathf.Sin(Time.time * 3f + i * 0.6f)) * 10f;
                 GUI.color = Palette.Crate(i);
-                GUI.DrawTexture(new Rect((w - rowWidth) / 2 + i * (boxSize + gap), y + 280, boxSize, boxSize), Texture2D.whiteTexture);
+                GUI.DrawTexture(new Rect((w - rowWidth) / 2 + i * (boxSize + gap), y + 280 - bounce, boxSize, boxSize), Texture2D.whiteTexture);
             }
             GUI.color = old;
 
-            float bw = w - 240, bx = 120;
-            float by = h * 0.55f;
-            if (GUI.Button(new Rect(bx, by, bw, 160), $"Oyna  ·  Bölüm {Progress.CurrentLevel}", _button))
+            // İki mod kartı: eşit boyut, yan yana
+            float cardGap = 40f, side = 100f;
+            float cw = (w - 2 * side - cardGap) / 2f, ch = 440f;
+            float cy = Mathf.Max(y + 420f, h * 0.40f);
+            Rect left = new Rect(side, cy, cw, ch);
+            Rect right = new Rect(side + cw + cardGap, cy, cw, ch);
+
+            if (GUI.Button(left, GUIContent.none, _cardAdventure))
             {
                 _confirmReset = false;
                 _game.Play();
             }
+            GUI.Label(new Rect(left.x, left.y + 60, left.width, 90), "MACERA", _cardTitle);
+            GUI.Label(new Rect(left.x, left.y + 170, left.width, 70), $"Bölüm {Progress.CurrentLevel}", _cardSub);
+            GUI.Label(new Rect(left.x + 20, left.y + 280, left.width - 40, 110), "Bölüm bölüm\nilerle", _cardDesc);
 
-            by += 200;
+            if (GUI.Button(right, GUIContent.none, _cardEndless))
+            {
+                _confirmReset = false;
+                _game.StartEndless();
+            }
+            int best = Progress.EndlessBest;
+            GUI.Label(new Rect(right.x, right.y + 60, right.width, 90), "SONSUZ", _cardTitle);
+            GUI.Label(new Rect(right.x, right.y + 170, right.width, 70), best > 0 ? $"Rekor: {best}" : "Rekor yok", _cardSub);
+            GUI.Label(new Rect(right.x + 20, right.y + 280, right.width - 40, 110), "Puan topla,\nrekor kır", _cardDesc);
+
+            if (best == 0)
+            {
+                // Yeni modu öne çıkaran atan rozet
+                float pulse = 1f + 0.08f * Mathf.Sin(Time.time * 6f);
+                float bw2 = 150f * pulse, bh2 = 64f * pulse;
+                GUI.Label(new Rect(right.xMax - bw2 + 20, right.y - bh2 / 2, bw2, bh2), "YENİ!", _badge);
+            }
+
+            float bw = w - 2 * side, bx = side;
+            float by = cy + ch + 50f;
             if (GUI.Button(new Rect(bx, by, bw / 2 - 12, 110), Progress.SoundOn ? "Ses: Açık" : "Ses: Kapalı", _secondary))
             {
                 Progress.SoundOn = !Progress.SoundOn;
@@ -418,16 +495,39 @@ namespace HonkAndLoad.UI
 
             float y = inset + 25f;
             BoardState s = _game.State;
-            GUI.Label(new Rect(40, y, 260, 90), $"Bölüm {_game.LevelNumber}", _label);
-            GUI.Label(new Rect(290, y, 300, 90), $"Kamyon: {s.TotalTrucks - s.DepartedTrucks}", _label);
+            bool endless = _game.Mode == GameController.GameMode.Endless && _game.Endless != null;
+            if (endless)
+            {
+                EndlessDirector d = _game.Endless;
+                GUI.Label(new Rect(40, y - 5, 330, 100), $"{d.Score}", _bigNumber);
+                int best = Mathf.Max(Progress.EndlessBest, d.Score);
+                GUI.Label(new Rect(300, y, 300, 90), $"Rekor {best}", _label);
+            }
+            else
+            {
+                GUI.Label(new Rect(40, y, 260, 90), $"Bölüm {_game.LevelNumber}", _label);
+                GUI.Label(new Rect(290, y, 300, 90), $"Kamyon: {s.TotalTrucks - s.DepartedTrucks}", _label);
+            }
 
             if (GUI.Button(new Rect(w - 490, y, 210, 90), "Menü", _secondary)) _game.ShowMenu();
             if (_game.State != null && GUI.Button(new Rect(w - 260, y, 220, 90), "Baştan", _button)) _game.RestartLevel();
 
+            float below = inset + TopBarHeight + 10;
+            if (endless && _game.Endless != null)
+            {
+                // Zorluk çubuğu: bir sonraki kademeye ne kadar kaldı
+                EndlessDirector d = _game.Endless;
+                GUI.Label(new Rect(40, below, 260, 50), $"Zorluk {d.Tier + 1}", _cardDesc);
+                Rect bar = new Rect(280, below + 15, w - 320, 22);
+                GUI.DrawTexture(bar, _barBack);
+                GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * Mathf.Clamp01(d.TierProgress), bar.height), _barFill);
+                below += 55;
+            }
+
             if (_game.State != null && _game.CurrentPhase == GameController.Phase.Playing
                 && _game.State.BufferUsed() >= _game.State.Buffer.Length - 1)
             {
-                GUI.Label(new Rect(40, inset + TopBarHeight + 10, w - 80, 70), "Raf dolmak üzere!", _label);
+                GUI.Label(new Rect(40, below, w - 80, 70), "Raf dolmak üzere!", _label);
             }
         }
 
@@ -453,21 +553,48 @@ namespace HonkAndLoad.UI
 
         private void DrawLose(float w, float h)
         {
-            Rect panel = new Rect(90, h / 2 - 300, w - 180, 600);
+            bool endless = _game.Mode == GameController.GameMode.Endless && _game.Endless != null;
+            float panelH = endless ? 900f : 600f;
+            Rect panel = new Rect(90, h / 2 - panelH / 2, w - 180, panelH);
             GUI.Box(panel, GUIContent.none, _panel);
             Track(panel);
-            GUI.Label(new Rect(panel.x, panel.y + 50, panel.width, 100), "Raf doldu!", _title);
 
-            float y = panel.y + 200;
+            float y;
+            if (endless)
+            {
+                EndlessDirector d = _game.Endless;
+                GUI.Label(new Rect(panel.x, panel.y + 40, panel.width, 100), "Raf doldu!", _title);
+                GUI.Label(new Rect(panel.x, panel.y + 150, panel.width, 130), $"{d.Score}", _logo);
+                string record = _game.NewRecord ? "YENİ REKOR!" : $"Rekor: {Progress.EndlessBest}";
+                Color old = GUI.color;
+                if (_game.NewRecord) GUI.color = Palette.Warning;
+                GUI.Label(new Rect(panel.x, panel.y + 290, panel.width, 70), record, _cardSub);
+                GUI.color = old;
+                GUI.Label(new Rect(panel.x, panel.y + 360, panel.width, 60),
+                    $"{d.TrucksSent} kamyon  ·  Zorluk {d.Tier + 1}", _cardDesc);
+                y = panel.y + 450;
+            }
+            else
+            {
+                GUI.Label(new Rect(panel.x, panel.y + 50, panel.width, 100), "Raf doldu!", _title);
+                y = panel.y + 200;
+            }
+
             if (!_game.ExtraSlotsUsed)
             {
                 // TODO (Aşama 3): önce ödüllü reklam göster, izlenince slot ver
                 if (GUI.Button(new Rect(panel.x + 100, y, panel.width - 200, 120), "+3 Slot (Reklam)", _button))
                     _game.GrantExtraSlots();
-                y += 160;
+                y += 150;
             }
-            if (GUI.Button(new Rect(panel.x + 100, y, panel.width - 200, 120), "Tekrar Dene", _button))
+            if (GUI.Button(new Rect(panel.x + 100, y, panel.width - 200, 120), endless ? "Tekrar Oyna" : "Tekrar Dene", _button))
                 _game.RestartLevel();
+            if (endless)
+            {
+                y += 150;
+                if (GUI.Button(new Rect(panel.x + 200, y, panel.width - 400, 80), "Menü", _secondary))
+                    _game.ShowMenu();
+            }
         }
 
         /// <summary>GUI koordinatındaki alanı dokunma kontrolü için ekran koordinatına çevirir.</summary>

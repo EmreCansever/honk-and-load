@@ -17,6 +17,14 @@ namespace HonkAndLoad.Gameplay
     public class GameController : MonoBehaviour
     {
         public enum Phase { Menu, Playing, Won, Lost }
+        public enum GameMode { Adventure, Endless }
+
+        public GameMode Mode { get; private set; }
+        public EndlessDirector Endless { get; private set; }
+        /// <summary>Sonsuz modda bu oyunda rekor kırıldı mı?</summary>
+        public bool NewRecord { get; private set; }
+        /// <summary>Oyun başlarken geçerli olan rekor (karşılaştırma için).</summary>
+        public int RecordAtStart { get; private set; }
 
         public const int ExtraSlotsReward = 3;
 
@@ -142,6 +150,22 @@ namespace HonkAndLoad.Gameplay
             yield return new WaitForSecondsRealtime(1.0f);
             yield return Shot(prefix + "_6_genis.png");
 
+            // Sonsuz mod: birkaç otomatik hamle, sonra oyun sonu paneli
+            StartEndless();
+            for (int i = 0; i < 12 && CurrentPhase == Phase.Playing && _hint.Valid; i++)
+            {
+                if (_hint.Kind == Tappable.TapKind.Column) HandleColumnTap(_hint.Index);
+                else HandleBufferTap(_hint.Index);
+                yield return new WaitForSecondsRealtime(0.15f);
+            }
+            _hud.Banner("Zorluk 2!", "Koliler daha karışık geliyor");
+            yield return new WaitForSecondsRealtime(0.5f);
+            yield return Shot(prefix + "_7_sonsuz.png");
+
+            SetPhase(Phase.Lost);
+            yield return new WaitForSecondsRealtime(1.0f);
+            yield return Shot(prefix + "_8_sonsuz_bitis.png");
+
             Debug.Log($"[HonkAndLoad] Ekran taraması bitti: {prefix}_*.png");
             UnityEditor.EditorApplication.isPlaying = false;
         }
@@ -208,6 +232,7 @@ namespace HonkAndLoad.Gameplay
         /// <summary>Giriş ekranına dön. Oyun alanı temizlenir.</summary>
         public void ShowMenu()
         {
+            SaveEndlessBest();
             StopAllCoroutines();
             _view.Clear();
             State = null;
@@ -227,6 +252,7 @@ namespace HonkAndLoad.Gameplay
 
         public void StartLevel(int number)
         {
+            Mode = GameMode.Adventure;
             LevelNumber = Mathf.Max(1, number);
             _levelData = LevelLoader.Load(LevelNumber);
             RestartLevel();
@@ -234,6 +260,11 @@ namespace HonkAndLoad.Gameplay
 
         public void RestartLevel()
         {
+            if (Mode == GameMode.Endless)
+            {
+                StartEndless();
+                return;
+            }
             StopAllCoroutines();
             State = new BoardState(_levelData);
             SetPhase(Phase.Playing);
@@ -248,6 +279,63 @@ namespace HonkAndLoad.Gameplay
         }
 
         public void NextLevel() => StartLevel(LevelNumber + 1);
+
+        // ---------- Sonsuz mod ----------
+
+        /// <summary>Giriş ekranındaki "Sonsuz" kartı ve oyun sonu "Tekrar Oyna".</summary>
+        public void StartEndless()
+        {
+            SaveEndlessBest();
+            StopAllCoroutines();
+            Mode = GameMode.Endless;
+            LevelNumber = 0; // öğretici açılmasın
+            Endless = new EndlessDirector(System.Environment.TickCount);
+            State = Endless.CreateBoard();
+            RecordAtStart = Progress.EndlessBest;
+            NewRecord = false;
+            SetPhase(Phase.Playing);
+            ExtraSlotsUsed = false;
+            Moves = 0;
+            _idle = 0f;
+            _feedback.ResetCombo();
+            _view.Build(State);
+            _view.SetBufferWarning(false);
+            UpdateHint();
+            FitCamera();
+        }
+
+        private void SaveEndlessBest()
+        {
+            if (Mode != GameMode.Endless || Endless == null) return;
+            if (Endless.Score > Progress.EndlessBest)
+            {
+                Progress.EndlessBest = Endless.Score;
+                NewRecord = true;
+            }
+        }
+
+        private void AfterEndlessMove(MoveResult move)
+        {
+            EndlessDirector.ScoreEvent e = Endless.OnMove(move);
+            if (e.TruckDone)
+            {
+                Vector3 at = _view.DockWorld(e.Dock);
+                if (e.Perfect) _hud.Popup($"MÜKEMMEL! +{e.Points}", at, Palette.Warning, 0.2f);
+                else _hud.Popup($"+{e.Points}", at, Color.white, 0.2f);
+            }
+            if (e.ComboMilestone > 0)
+                _hud.Popup($"x{e.ComboMilestone} Kombo!", _view.DockWorld(e.Dock), Palette.Warning, 0f);
+            if (e.TierUp)
+            {
+                _hud.Banner($"Zorluk {e.NewTier + 1}!", e.NewTier % 2 == 0 ? "Yeni bir renk geldi!" : "Koliler daha karışık geliyor");
+                StartCoroutine(Delayed(0.2f, _feedback.TruckDeparts));
+            }
+            if (!NewRecord && RecordAtStart > 0 && Endless.Score > RecordAtStart)
+            {
+                NewRecord = true;
+                _hud.Banner("Yeni Rekor!", $"{Endless.Score} puan");
+            }
+        }
 
         /// <summary>Kayıp ekranındaki "+3 slot" (ileride ödüllü reklamdan sonra çağrılacak).</summary>
         public void GrantExtraSlots()
@@ -340,10 +428,11 @@ namespace HonkAndLoad.Gameplay
         {
             Moves++;
             _view.Apply(move);
+            if (Mode == GameMode.Endless) AfterEndlessMove(move);
             if (move.ToDock >= 0)
             {
                 _feedback.Load();
-                int combo = _feedback.Combo;
+                int combo = Mode == GameMode.Endless ? 0 : _feedback.Combo;
                 // Yalnızca dönüm noktalarında: 3, 5, 8, 10, 15, 20...
                 if (combo == 3 || combo == 5 || combo == 8 || (combo >= 10 && combo % 5 == 0))
                     _hud.Popup($"x{combo} Kombo!", _view.DockWorld(move.ToDock), Palette.Warning, 0f);
@@ -353,7 +442,8 @@ namespace HonkAndLoad.Gameplay
             if (move.TruckDeparted)
             {
                 StartCoroutine(Delayed(0.3f, _feedback.TruckDeparts));
-                _hud.Popup("Teslim!", _view.DockWorld(move.ToDock), Color.white, 0.25f);
+                if (Mode == GameMode.Adventure)
+                    _hud.Popup("Teslim!", _view.DockWorld(move.ToDock), Color.white, 0.25f);
             }
 
             _view.SetBufferWarning(State.BufferUsed() >= State.Buffer.Length - 1);
@@ -371,6 +461,7 @@ namespace HonkAndLoad.Gameplay
             else if (State.IsStuck())
             {
                 SetPhase(Phase.Lost);
+                SaveEndlessBest();
             }
             UpdateHint();
         }
@@ -422,6 +513,7 @@ namespace HonkAndLoad.Gameplay
             {
                 if (!State.CanTapColumn(c)) continue;
                 if (fallback < 0) fallback = c;
+                if (State.IsEndless) break; // sonsuz tahtada çözücü anlamsız: ilk uygun sütun
                 BoardState next = State.Clone();
                 next.TapColumn(c);
                 if (LevelSolver.IsSolvableFrom(next))
