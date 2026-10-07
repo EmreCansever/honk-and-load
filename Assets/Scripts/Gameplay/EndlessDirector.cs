@@ -47,8 +47,10 @@ namespace HonkAndLoad.Gameplay
             _rng = new Random(seed);
         }
 
-        public int ColorCount => Math.Min(LevelGenerator.MaxColors, 4 + Tier / 2);
-        public float Noise => Math.Min(28f, 3f + 3f * Tier);
+        // Yeni kurallarla (raf dolunca oyun biter) simülasyonla ayarlandı:
+        // dikkatsiz oyuncu ~1 dk, dikkatli oyuncu ~6–8 dk dayanır.
+        public int ColorCount => Math.Min(LevelGenerator.MaxColors, 5 + Tier / 2);
+        public float Noise => Math.Min(120f, 10f + 8f * Tier);
 
         public static int TierStart(int tier)
         {
@@ -166,7 +168,8 @@ namespace HonkAndLoad.Gameplay
             }
 
             bool fromBuffer = move.FromBuffer >= 0;
-            if (_streakDock == move.ToDock) _streak++;
+            if (fromBuffer) { _streakDock = -1; _streak = 0; } // Mükemmel yalnızca 3 doğrudan yüklemeyle
+            else if (_streakDock == move.ToDock) _streak++;
             else { _streakDock = move.ToDock; _streak = 1; }
 
             if (fromBuffer)

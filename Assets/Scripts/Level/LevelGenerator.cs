@@ -22,7 +22,7 @@ namespace HonkAndLoad.Level
         /// <summary>
         /// Oyun bu "sanal bölüm" zorluğundan başlar. Büyüttükçe ilk bölümler zorlaşır.
         /// </summary>
-        public const int StartOffset = 9;
+        public const int StartOffset = 6;
 
         public struct Settings
         {
@@ -35,8 +35,8 @@ namespace HonkAndLoad.Level
             /// <summary>Sıralamanın ne kadar bozulacağı (koli sayısı cinsinden).</summary>
             public float Noise;
             /// <summary>
-            /// Hedeflenen "rastgele oyuncu" kazanma oranı. Adaylar arasından buna en yakın
-            /// olan seçilir. Düşük = zor. Gerçek oyuncular plan yaptığı için bundan iyi oynar.
+            /// Hedeflenen "dikkatli oyuncu" kazanma oranı. Adaylar arasından buna en yakın
+            /// olan seçilir. Düşük = zor. Dikkatsiz oyuncu bundan çok daha sık kaybeder.
             /// </summary>
             public float TargetWinRate;
         }
@@ -48,17 +48,18 @@ namespace HonkAndLoad.Level
             bool hard = n % 5 == 0;
             bool relief = n % 5 == 1 && n > 1;
 
-            int colors = Math.Min(MaxColors, 3 + (e - 1) / 6);
-            int trucksPerColor = Math.Min(3, 1 + (e - 1) / 10);
+            int colors = Math.Min(MaxColors, 3 + (e - 1) / 5);
+            int trucksPerColor = Math.Min(3, 1 + (e - 1) / 8);
 
-            float noise = Math.Min(28f, 10f + e * 0.55f);
+            // Karışıklık: büyük değer = koliler kamyon sırasından çok uzak, plan şart
+            float noise = Math.Min(80f, 15f + e * 2.5f);
             if (hard) noise *= 1.3f;
             if (relief) noise *= 0.7f;
 
-            float target = Math.Max(0.4f, 0.8f - 0.01f * n);
+            float target = Math.Max(0.45f, 0.95f - 0.015f * n);
             if (hard) target -= 0.2f;
-            if (relief) target += 0.15f;
-            target = Math.Min(0.95f, Math.Max(0.2f, target));
+            if (relief) target += 0.1f;
+            target = Math.Min(1f, Math.Max(0.25f, target));
 
             return new Settings
             {
@@ -77,7 +78,7 @@ namespace HonkAndLoad.Level
         public static int BufferSizeFor(int levelNumber) =>
             Math.Min(MaxBufferSize, BaseBufferSize + (Math.Max(1, levelNumber) - 1) / LevelsPerExtraSlot);
 
-        public static LevelData Generate(int levelNumber, int candidates = 10)
+        public static LevelData Generate(int levelNumber, int candidates = 12)
         {
             Settings s = SettingsFor(levelNumber);
             var rng = new Random(levelNumber * 7919 + 17);
@@ -88,7 +89,7 @@ namespace HonkAndLoad.Level
             {
                 LevelData data = BuildRandom(s, rng);
                 fallback ??= data;
-                if (!LevelSolver.Solve(data, 5000).Solvable) continue;
+                if (!LevelSolver.Solve(data, 3000).Solvable) continue;
 
                 float winRate = LevelSolver.EstimateWinRate(data, 30, levelNumber);
                 float distance = Math.Abs(winRate - s.TargetWinRate);

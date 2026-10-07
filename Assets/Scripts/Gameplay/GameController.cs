@@ -343,6 +343,7 @@ namespace HonkAndLoad.Gameplay
             if (CurrentPhase != Phase.Lost || ExtraSlotsUsed) return;
             ExtraSlotsUsed = true;
             State.AddBufferSlots(ExtraSlotsReward);
+            State.Revive();
             _view.RebuildBuffer();
             _view.SetBufferWarning(false);
             FitCamera();
@@ -446,6 +447,19 @@ namespace HonkAndLoad.Gameplay
                     _hud.Popup("Teslim!", _view.DockWorld(move.ToDock), Color.white, 0.25f);
             }
 
+            // Raftan kendiliğinden binen koliler: ses, puan, kamyon kalkışı
+            ForEachAutoLoad(move, auto =>
+            {
+                if (Mode == GameMode.Endless) AfterEndlessMove(auto);
+                _feedback.Load();
+                if (auto.TruckDeparted)
+                {
+                    StartCoroutine(Delayed(0.3f, _feedback.TruckDeparts));
+                    if (Mode == GameMode.Adventure)
+                        _hud.Popup("Teslim!", _view.DockWorld(auto.ToDock), Color.white, 0.25f);
+                }
+            });
+
             _view.SetBufferWarning(State.BufferUsed() >= State.Buffer.Length - 1);
 
             if (State.IsWon())
@@ -464,6 +478,16 @@ namespace HonkAndLoad.Gameplay
                 SaveEndlessBest();
             }
             UpdateHint();
+        }
+
+        private static void ForEachAutoLoad(MoveResult move, System.Action<MoveResult> action)
+        {
+            if (move.AutoLoads == null) return;
+            foreach (MoveResult auto in move.AutoLoads)
+            {
+                action(auto);
+                ForEachAutoLoad(auto, action);
+            }
         }
 
         /// <summary>Konvoyda geçecek kamyon renkleri (bölümdeki ilk 3 farklı renk).</summary>
@@ -513,7 +537,7 @@ namespace HonkAndLoad.Gameplay
             {
                 if (!State.CanTapColumn(c)) continue;
                 if (fallback < 0) fallback = c;
-                if (State.IsEndless) break; // sonsuz tahtada çözücü anlamsız: ilk uygun sütun
+                if (State.IsEndless) { fallback = LevelSolver.CarefulChoice(State, null); break; }
                 BoardState next = State.Clone();
                 next.TapColumn(c);
                 if (LevelSolver.IsSolvableFrom(next))
@@ -524,7 +548,7 @@ namespace HonkAndLoad.Gameplay
             }
             if (fallback >= 0)
                 _hint = new Hint { Valid = true, Kind = Tappable.TapKind.Column, Index = fallback,
-                    Text = "Uygun kamyon yok: koli rafa gider, kamyonu gelince yüklersin." };
+                    Text = "Uygun kamyon yok: koli rafa gider, kamyonu gelince kendiliğinden biner. Raf dolarsa kaybedersin!" };
         }
 
         private static IEnumerator Delayed(float seconds, System.Action action)

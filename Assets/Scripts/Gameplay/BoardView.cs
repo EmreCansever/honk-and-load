@@ -272,6 +272,10 @@ namespace HonkAndLoad.Gameplay
                     StartMove(arriving.Root, dock, 0.35f, 0f, 0.35f);
                 }
             }
+
+            // Raftan yeni kamyona kendiliğinden binen koliler
+            if (move.AutoLoads != null)
+                foreach (MoveResult auto in move.AutoLoads) Apply(auto);
         }
 
         // ---------- Konumlar (ipucu ve yazılar için, dünya koordinatı) ----------

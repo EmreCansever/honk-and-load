@@ -28,6 +28,12 @@ namespace HonkAndLoad.Gameplay
         public bool TruckDeparted;    // kamyon doldu ve gitti mi
         public Truck ArrivedTruck;    // yerine gelen kamyon (yoksa null)
         public int RefillColor = -1;  // sonsuz mod: sütunun arkasına gelen yeni koli
+
+        /// <summary>
+        /// Bu hamle bir kamyonu doldurup yenisini getirdiyse, raftan yeni kamyona kendiliğinden
+        /// binen koliler (sırayla). Her biri FromBuffer + ToDock dolu bir hamle sonucudur.
+        /// </summary>
+        public List<MoveResult> AutoLoads;
     }
 
     /// <summary>
@@ -51,6 +57,9 @@ namespace HonkAndLoad.Gameplay
         public System.Func<int> TruckSupplier;
 
         public bool IsEndless => Refill != null;
+
+        /// <summary>Raf tamamen doldu: oyun kaybedildi.</summary>
+        public bool Lost { get; private set; }
 
         private BoardState() { }
 
@@ -105,6 +114,7 @@ namespace HonkAndLoad.Gameplay
 
         public bool CanTapColumn(int column)
         {
+            if (Lost) return false;
             int color = FrontCrate(column);
             if (color < 0) return false;
             return FindDockFor(color) >= 0 || FreeBufferSlot() >= 0;
@@ -112,6 +122,7 @@ namespace HonkAndLoad.Gameplay
 
         public bool CanTapBuffer(int slot)
         {
+            if (Lost) return false;
             int color = Buffer[slot];
             return color >= 0 && FindDockFor(color) >= 0;
         }
@@ -124,9 +135,10 @@ namespace HonkAndLoad.Gameplay
             return true;
         }
 
-        /// <summary>Kazanılmadı ve yapılacak hiçbir hamle yok.</summary>
+        /// <summary>Oyun bitti: raf doldu ya da yapılacak hiçbir hamle yok.</summary>
         public bool IsStuck()
         {
+            if (Lost) return true;
             if (IsWon()) return false;
             for (int c = 0; c < Columns.Count; c++) if (CanTapColumn(c)) return false;
             for (int s = 0; s < Buffer.Length; s++) if (CanTapBuffer(s)) return false;
@@ -156,6 +168,8 @@ namespace HonkAndLoad.Gameplay
                 int slot = FreeBufferSlot();
                 Buffer[slot] = color;
                 result.ToBuffer = slot;
+                // Kural: raf tamamen dolarsa oyun biter
+                if (FreeBufferSlot() < 0) Lost = true;
             }
             return result;
         }
@@ -183,8 +197,33 @@ namespace HonkAndLoad.Gameplay
                 DepartedTrucks++;
                 Docks[dock] = NextTruck();
                 result.ArrivedTruck = Docks[dock];
+                AutoLoadFromBuffer(result);
             }
         }
+
+        /// <summary>
+        /// Yeni gelen kamyonlara raftaki uygun koliler kendiliğinden biner.
+        /// Bu kamyonu da doldurursa zincirleme devam eder.
+        /// </summary>
+        private void AutoLoadFromBuffer(MoveResult parent)
+        {
+            for (int s = 0; s < Buffer.Length; s++)
+            {
+                int color = Buffer[s];
+                if (color < 0) continue;
+                int dock = FindDockFor(color);
+                if (dock < 0) continue;
+                Buffer[s] = -1;
+                var auto = new MoveResult { Color = color, FromBuffer = s };
+                if (parent.AutoLoads == null) parent.AutoLoads = new List<MoveResult>();
+                parent.AutoLoads.Add(auto);
+                LoadInto(dock, auto); // kendi zincirini auto.AutoLoads içine yazar
+                s = -1; // raf değişti, baştan tara
+            }
+        }
+
+        /// <summary>"+3 slot" ile oyuna devam.</summary>
+        public void Revive() => Lost = false;
 
         /// <summary>Kaybedince "+3 slot" ödülü.</summary>
         public void AddBufferSlots(int count)
@@ -203,6 +242,7 @@ namespace HonkAndLoad.Gameplay
                 TruckCapacity = TruckCapacity,
                 TotalTrucks = TotalTrucks,
                 DepartedTrucks = DepartedTrucks,
+                Lost = Lost,
                 Docks = new Truck[Docks.Length],
                 Buffer = (int[])Buffer.Clone()
             };

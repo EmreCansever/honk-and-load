@@ -44,6 +44,7 @@ namespace HonkAndLoad.Level
             result.NodesExplored++;
 
             ApplyForcedLoads(state);
+            if (state.Lost) return;
             if (state.BufferUsed() > peak) peak = state.BufferUsed();
 
             if (state.IsWon())
@@ -53,7 +54,6 @@ namespace HonkAndLoad.Level
                 return;
             }
             if (!visited.Add(state.Key())) return;
-            if (state.FreeBufferSlot() < 0) return; // doğrudan yükleme yok, raf dolu
 
             // Her sütunun ön kolisini rafa koymayı dene.
             for (int c = 0; c < state.Columns.Count; c++)
@@ -61,6 +61,7 @@ namespace HonkAndLoad.Level
                 if (state.FrontCrate(c) < 0) continue;
                 BoardState next = state.Clone();
                 next.TapColumn(c);
+                if (next.Lost) continue; // bu hamle rafı doldurur
                 Search(next, peak, visited, ref result, nodeLimit);
                 if (result.Solvable || result.HitLimit) return;
             }
@@ -86,29 +87,47 @@ namespace HonkAndLoad.Level
         }
 
         /// <summary>
-        /// Zorluk ölçüsü: doğrudan yüklenebilen koliyi hep yükleyen, yoksa rastgele bir
-        /// sütuna dokunan basit bir oyuncunun kaç denemede kazandığı (0–1).
+        /// Zorluk ölçüsü: "dikkatli oyuncu" simülasyonunun kazanma oranı (0–1).
+        /// Doğrudan yüklenebilen koliyi hep yükler; yoksa arkasındaki koli bir kamyona uyan
+        /// ya da rengi rafta zaten bekleyen sütunu seçer. Gerçek dikkatli bir oyuncuya yakın.
         /// </summary>
         public static float EstimateWinRate(LevelData data, int runs, int seed)
         {
             var rng = new System.Random(seed);
             int wins = 0;
-            var options = new List<int>();
             for (int run = 0; run < runs; run++)
             {
                 var state = new BoardState(data);
-                while (true)
+                int guard = 0;
+                while (!state.Lost && !state.IsWon() && guard++ < 2000)
                 {
-                    ApplyForcedLoads(state);
-                    if (state.IsWon()) { wins++; break; }
-                    options.Clear();
-                    for (int c = 0; c < state.Columns.Count; c++)
-                        if (state.CanTapColumn(c)) options.Add(c);
-                    if (options.Count == 0) break;
-                    state.TapColumn(options[rng.Next(options.Count)]);
+                    int c = CarefulChoice(state, rng);
+                    if (c < 0) break;
+                    state.TapColumn(c);
                 }
+                if (state.IsWon()) wins++;
             }
             return runs > 0 ? (float)wins / runs : 0f;
+        }
+
+        /// <summary>Dikkatli oyuncunun seçeceği sütun (yoksa -1). İpucu sistemi de kullanır.</summary>
+        public static int CarefulChoice(BoardState state, System.Random rng)
+        {
+            int best = -1;
+            float bestScore = float.MinValue;
+            for (int c = 0; c < state.Columns.Count; c++)
+            {
+                if (!state.CanTapColumn(c)) continue;
+                int front = state.FrontCrate(c);
+                if (state.FindDockFor(front) >= 0) return c; // doğrudan yükleme
+                List<int> col = state.Columns[c];
+                float score = 0f;
+                if (col.Count >= 2 && state.FindDockFor(col[col.Count - 2]) >= 0) score += 2f;
+                foreach (int b in state.Buffer) if (b == front) { score += 1f; break; }
+                score += rng != null ? (float)rng.NextDouble() * 0.5f : 0f;
+                if (score > bestScore) { bestScore = score; best = c; }
+            }
+            return best;
         }
     }
 }

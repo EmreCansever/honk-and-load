@@ -364,7 +364,7 @@ namespace HonkAndLoad.UI
             {
                 // Alt kısımda: kamyonları ve dokunulacak koliyi kapatmasın
                 float bottomInset = Screen.safeArea.y / _scale;
-                Rect r = new Rect(60, h - bottomInset - 200, w - 120, 150);
+                Rect r = new Rect(60, h - bottomInset - 240, w - 120, 190);
                 GUI.Label(r, text, _bubble);
             }
         }
@@ -527,7 +527,10 @@ namespace HonkAndLoad.UI
             if (_game.State != null && _game.CurrentPhase == GameController.Phase.Playing
                 && _game.State.BufferUsed() >= _game.State.Buffer.Length - 1)
             {
-                GUI.Label(new Rect(40, below, w - 80, 70), "Raf dolmak üzere!", _label);
+                Color old = GUI.color;
+                GUI.color = new Color(1f, 0.55f, 0.5f);
+                GUI.Label(new Rect(40, below, w - 80, 70), "Dikkat: rafta son 1 yer!", _label);
+                GUI.color = old;
             }
         }
 

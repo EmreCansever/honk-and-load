@@ -12,8 +12,8 @@ Renkli kolileri doğru kamyona yükleyip sıkışan depoyu boşalttığın, tek 
 1. Depoda sütunlar halinde koliler var; bir sütuna dokununca **en öndeki koli** alınır.
 2. Koli, rengi eşleşen ve yeri olan bir **rampadaki kamyona** gider. Uygun kamyon yoksa **bekleme rafına** gider.
 3. Kamyon dolunca düdük çalıp gider ve sıradaki kamyon gelir.
-4. Raftaki bir koliye dokunarak onu uygun kamyona yükleyebilirsin.
-5. **Kazanma:** Tüm koliler yüklendi. **Kaybetme:** Raf doldu ve yapılacak hamle kalmadı.
+4. Raftaki koliler, rengindeki kamyon gelince **kendiliğinden** biner.
+5. **Kazanma:** Tüm koliler yüklendi. **Kaybetme:** Raf **tamamen dolduğu anda** oyun biter. Uygun kamyonu olmayan her koli bir slot yakar; dikkatli oynamak gerekir.
 6. Raf 5 slotla başlar, her 15 bölümde bir slot artar (en fazla 8).
 
 ## Modlar
@@ -21,7 +21,7 @@ Renkli kolileri doğru kamyona yükleyip sıkışan depoyu boşalttığın, tek 
 - **Macera:** Bölüm bölüm ilerleme (yukarıdaki kurallar).
 - **Sonsuz:** Bölüm yok. Sütunlardan koli alındıkça arkadan yenisi gelir; raf dolup hamle kalmayınca oyun biter. En yüksek skor ana menüde görünür.
   - Puan: depodan kamyona 10 (art arda yüklemelerde kombo çarpanı, en fazla x2), raftan kamyona 5, dolan kamyon +30, 3 koli art arda aynı kamyona **Mükemmel** +50.
-  - Zorluk kademeleri: 300, 800, 1500, 2400, 3500, 4800, 6300, 8000 puan, sonra her 2000 puanda bir. Her kademede koliler daha karışık gelir, her iki kademede bir yeni renk eklenir (4 → 8 renk).
+  - Zorluk kademeleri: 300, 800, 1500, 2400, 3500, 4800, 6300, 8000 puan, sonra her 2000 puanda bir. Her kademede koliler daha karışık gelir, her iki kademede bir yeni renk eklenir (5 → 8 renk).
   - Adalet: her kamyon için tam 3 koli üretilir; koliler kamyonların geliş sırasına göre gelir (`EndlessDirector`).
 
 ## Projeyi açma
@@ -70,6 +70,7 @@ Tüm görseller kodla üretilir (`VisualFactory`): kolilerde renk körleri için
 - Her renk için koli sayısı = o renkteki kamyon sayısı × `truckCapacity` olmalı.
 - `Resources/Levels` içinde dosya yoksa bölüm otomatik üretilir. Şu an yalnızca 1. bölüm (öğretici) elle tasarlandı.
 - Başlangıç zorluğu `LevelGenerator.StartOffset` ile ayarlanır (büyüdükçe ilk bölümler zorlaşır).
+- Zorluk, "dikkatli oyuncu" simülasyonunun kazanma oranına göre seçilir (`LevelSolver.EstimateWinRate`). İlk 3–4 bölüm öğretici kolaylıkta; 5. bölümden itibaren dikkatsiz oynayan sık kaybeder.
 
 ## Yol haritası
 
