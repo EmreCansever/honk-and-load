@@ -129,10 +129,20 @@ namespace HonkAndLoad.Level
 
             // Sondan başa dağıt: en son gerekecek koliler en derine, ilk gerekenler en öne
             for (int i = 0; i < s.Columns; i++) data.columns.Add(new ColumnData());
+            // Sütun derinliği sınırı: ortalamanın 1 fazlası. Derin sütunlar dar ekranlarda
+            // kolileri küçültür ve dokunmayı zorlaştırır.
+            int maxHeight = (sequence.Count + s.Columns - 1) / s.Columns + 1;
             int dealt = 0;
             for (int i = order.Length - 1; i >= 0; i--, dealt++)
             {
                 int column = rng.NextDouble() < 0.3 ? rng.Next(s.Columns) : dealt % s.Columns;
+                if (data.columns[column].crates.Count >= maxHeight)
+                {
+                    int shortest = 0;
+                    for (int c = 1; c < s.Columns; c++)
+                        if (data.columns[c].crates.Count < data.columns[shortest].crates.Count) shortest = c;
+                    column = shortest;
+                }
                 data.columns[column].crates.Add(sequence[order[i]]);
             }
 

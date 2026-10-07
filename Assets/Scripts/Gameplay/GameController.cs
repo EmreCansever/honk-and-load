@@ -30,7 +30,8 @@ namespace HonkAndLoad.Gameplay
         public float PhaseTime { get; private set; }
 
         // İpucu / öğretici
-        public bool IsTutorial => LevelNumber == 1 && !Progress.TutorialDone;
+        public bool IsTutorial => LevelNumber == 1 && (!Progress.TutorialDone || _forceTutorial);
+        private bool _forceTutorial;
         public const float IdleHintSeconds = 7f;
         public bool HintVisible => !VideoMode && CurrentPhase == Phase.Playing && _hint.Valid && (IsTutorial || _idle > IdleHintSeconds);
         public Vector3 HintWorld => !_hint.Valid ? Vector3.zero
@@ -81,6 +82,13 @@ namespace HonkAndLoad.Gameplay
             bool preview = UnityEditor.SessionState.GetBool("hal_record_video_preview", false);
             UnityEditor.SessionState.SetBool("hal_record_video", false);
             UnityEditor.SessionState.SetBool("hal_record_video_preview", false);
+            if (UnityEditor.SessionState.GetBool("hal_screen_sweep", false))
+            {
+                UnityEditor.SessionState.SetBool("hal_screen_sweep", false);
+                // Ayrı nesnede çalışır: ShowMenu/StartLevel içindeki StopAllCoroutines onu durdurmasın
+                CoroutineHost.Create("ScreenSweep").StartCoroutine(ScreenSweep());
+                return;
+            }
             if (record || preview)
             {
                 StartVideoMode(record);
@@ -89,6 +97,63 @@ namespace HonkAndLoad.Gameplay
 #endif
             ShowMenu();
         }
+
+        // ---------- Ekran taraması (yalnızca Editor) ----------
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// Farklı telefon ekranlarını kontrol etmek için: menü, öğretici, oyun, kayıp ve
+        /// kazanma ekranlarının görüntüsünü Recordings/sweep/ altına kaydeder, sonra Play'den çıkar.
+        /// Device Simulator'da hangi cihaz seçiliyse o cihazın ekranı ve çentiği kullanılır.
+        /// </summary>
+        private IEnumerator ScreenSweep()
+        {
+            string device = SystemInfo.deviceModel;
+            foreach (char c in Path.GetInvalidFileNameChars()) device = device.Replace(c, '_');
+            device = device.Replace(' ', '_');
+            string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Recordings", "sweep"));
+            Directory.CreateDirectory(folder);
+            string prefix = Path.Combine(folder, $"{device}_{Screen.width}x{Screen.height}");
+
+            ShowMenu();
+            yield return new WaitForSecondsRealtime(1.0f);
+            yield return Shot(prefix + "_1_menu.png");
+
+            _forceTutorial = true;
+            StartLevel(1);
+            yield return new WaitForSecondsRealtime(1.0f);
+            yield return Shot(prefix + "_2_ogretici.png");
+            _forceTutorial = false;
+
+            StartLevel(12);
+            yield return new WaitForSecondsRealtime(1.0f);
+            yield return Shot(prefix + "_3_oyun.png");
+
+            SetPhase(Phase.Lost);
+            yield return new WaitForSecondsRealtime(1.0f);
+            yield return Shot(prefix + "_4_kayip.png");
+
+            SetPhase(Phase.Won);
+            PhaseTime = 2f;
+            yield return new WaitForSecondsRealtime(0.5f);
+            yield return Shot(prefix + "_5_kazanma.png");
+
+            StartLevel(46); // en geniş tahta: 8 renk, 9 sütun, 8 slot raf
+            yield return new WaitForSecondsRealtime(1.0f);
+            yield return Shot(prefix + "_6_genis.png");
+
+            Debug.Log($"[HonkAndLoad] Ekran taraması bitti: {prefix}_*.png");
+            UnityEditor.EditorApplication.isPlaying = false;
+        }
+
+        private static IEnumerator Shot(string path)
+        {
+            yield return new WaitForEndOfFrame();
+            Texture2D tex = ScreenCapture.CaptureScreenshotAsTexture();
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            Destroy(tex);
+        }
+#endif
 
         // ---------- Reklam videosu ----------
 

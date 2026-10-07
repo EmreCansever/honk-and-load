@@ -19,6 +19,14 @@ namespace HonkAndLoad.EditorTools
             EditorApplication.isPlaying = true;
         }
 
+        [MenuItem("Honk & Load/Ekran Taraması (seçili cihaz)")]
+        private static void ScreenSweep()
+        {
+            if (EditorApplication.isPlaying) EditorApplication.isPlaying = false;
+            SessionState.SetBool("hal_screen_sweep", true);
+            EditorApplication.isPlaying = true;
+        }
+
         [MenuItem("Honk & Load/Video Modunu Kayıtsız Önizle")]
         private static void Preview()
         {

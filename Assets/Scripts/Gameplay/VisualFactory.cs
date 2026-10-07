@@ -60,6 +60,11 @@ namespace HonkAndLoad.Gameplay
             Paint(crate, Palette.Crate(color));
             crate.AddComponent<CrateInfo>().Color = color;
 
+            // Dokunma alanı kutudan biraz geniş: sütunlar arası boşluk da sayılır
+            // (sütun aralığı 1.0, sıra aralığı 0.92 → komşu kolilerle çakışmaz)
+            var hit = crate.GetComponent<BoxCollider>();
+            if (hit != null) hit.size = new Vector3(1.26f, 1.2f, 1.16f);
+
             // Koli bandı (üstten ve yanlardan geçen şerit). Koordinatlar kolinin kendi biriminde.
             Color tape = Color.Lerp(Palette.Crate(color), Color.white, 0.35f);
             Box("Tape", crate.transform, Vector3.zero, new Vector3(1.02f, 1.02f, 0.2f), tape);
