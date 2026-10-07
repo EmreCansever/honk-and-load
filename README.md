@@ -24,6 +24,22 @@ Renkli kolileri doğru kamyona yükleyip sıkışan depoyu boşalttığın, tek 
   - Zorluk kademeleri: 300, 800, 1500, 2400, 3500, 4800, 6300, 8000 puan, sonra her 2000 puanda bir. Her kademede koliler daha karışık gelir, her iki kademede bir yeni renk eklenir (5 → 8 renk).
   - Adalet: her kamyon için tam 3 koli üretilir; koliler kamyonların geliş sırasına göre gelir (`EndlessDirector`).
 
+## Ekonomi ve market
+
+- **Altın:** Başlangıçta 100. Bölüm geçince 20 (her 5. zor bölümde 40), sonsuz modda her 40 puana 1. Panellerdeki "Reklam izle" ödülü 3 katına çıkarır. Markette günde 5 kez reklamla 30 altın.
+- **Güçlendiriciler** (`Economy.cs`): açıldıkları bölümde 2 tane hediye edilir, sonra altınla alınır.
+
+  | Güçlendirici | Açıldığı bölüm | Fiyat | Ne yapar |
+  |---|---|---|---|
+  | Geri Al | 3 | 60 | Son hamleyi geri alır (yalnız Macera; kaybedince de kullanılabilir) |
+  | Mıknatıs | 6 | 100 | Bir kamyonun eksik kolilerini depodan (önce en derindekileri) çekip yükler |
+  | Karıştır | 9 | 80 | Depodaki kolileri yeniden dizer; Macera'da çözülebilir bir dizilim seçilir |
+  | +1 Raf | 12 | 120 | Rafa bu oyun için bir yer ekler (oyun başına en fazla 3) |
+
+- **Kaybedince devam:** +3 raf yeri, reklamla ya da 150 altınla (oyun başına bir kez).
+- **Market** (gerçek para, `Store.cs`): Başlangıç Paketi (reklamsız + 1.000 altın + her güçlendiriciden 3), Reklamsız, 1.000 / 3.000 / 7.500 altın. Ürün kimlikleri Play Console'da aynen tanımlanmalı: `starter_pack`, `no_ads`, `coins_1000`, `coins_3000`, `coins_7500`. Fiyatlar şimdilik yer tutucu.
+- **Henüz bağlı değil:** Google Play ödeme (Unity IAP) ve AdMob. O zamana kadar Editor ve geliştirme sürümünde satın alımlar ücretsiz simüle edilir, ödüllü reklam yerine kısa bir "test reklamı" gösterilir (`AdService.cs`). Yayın sürümünde satın alma "Mağaza henüz hazır değil" der.
+
 ## Projeyi açma
 
 1. Unity Hub → **Add → Add project from disk** → bu klasörü seç.

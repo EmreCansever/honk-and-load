@@ -217,8 +217,9 @@ namespace HonkAndLoad.Gameplay
             if (move.FromColumn >= 0)
             {
                 List<Transform> col = _columns[move.FromColumn];
-                crate = col[col.Count - 1];
-                col.RemoveAt(col.Count - 1);
+                int index = Mathf.Clamp(col.Count - 1 - move.FromDepth, 0, col.Count - 1);
+                crate = col[index];
+                col.RemoveAt(index);
 
                 // Sonsuz mod: sütunun arkasından yeni koli gelir
                 if (move.RefillColor >= 0)
@@ -276,6 +277,55 @@ namespace HonkAndLoad.Gameplay
             // Raftan yeni kamyona kendiliğinden binen koliler
             if (move.AutoLoads != null)
                 foreach (MoveResult auto in move.AutoLoads) Apply(auto);
+        }
+
+        /// <summary>Karıştırma sonrası: sütun kolilerini yeniden çizer, kısa bir zıplamayla.</summary>
+        public void RebuildColumns()
+        {
+            for (int c = 0; c < _columns.Count; c++)
+            {
+                foreach (Transform t in _columns[c]) if (t != null) Destroy(t.gameObject);
+                _columns[c].Clear();
+                List<int> col = _state.Columns[c];
+                for (int i = 0; i < col.Count; i++)
+                {
+                    Transform crate = MakeCrate(col[i], _root);
+                    crate.localPosition = ColumnSlot(c, col.Count - 1 - i);
+                    crate.localScale = Vector3.zero;
+                    SetTappable(crate.gameObject, Tappable.TapKind.Column, c);
+                    _columns[c].Add(crate);
+                    StartCoroutine(DelayedPop(crate, 0.03f * (c + i)));
+                }
+                RefreshColumnTint(c);
+            }
+        }
+
+        private IEnumerator DelayedPop(Transform t, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            yield return PopIn(t, CrateSize, 0.22f);
+        }
+
+        /// <summary>Mıknatıs efekti: kamyonun üstünde renkli parçacıklar.</summary>
+        public void MagnetBurst(int dock, int color)
+        {
+            if (_root == null) return;
+            StartCoroutine(Confetti(DockPosition(dock) + Vector3.up * 0.8f, color, 14, 0f, 0.7f));
+        }
+
+        /// <summary>Raftan kendiliğinden binen koliler ve mıknatıs gibi dizi hamleler için.</summary>
+        public void ApplyAll(List<MoveResult> moves, float stagger)
+        {
+            StartCoroutine(ApplySequence(moves, stagger));
+        }
+
+        private IEnumerator ApplySequence(List<MoveResult> moves, float stagger)
+        {
+            foreach (MoveResult m in moves)
+            {
+                Apply(m);
+                yield return new WaitForSeconds(stagger);
+            }
         }
 
         // ---------- Konumlar (ipucu ve yazılar için, dünya koordinatı) ----------

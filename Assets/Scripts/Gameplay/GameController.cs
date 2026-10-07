@@ -27,6 +27,20 @@ namespace HonkAndLoad.Gameplay
         public int RecordAtStart { get; private set; }
 
         public const int ExtraSlotsReward = 3;
+        /// <summary>Kaybedince altınla devam fiyatı (+3 slot).</summary>
+        public const int ReviveCoinPrice = 150;
+
+        // Ekonomi
+        /// <summary>Bu oyun/bölüm sonunda kazanılan altın (panelde gösterilir).</summary>
+        public int LastReward { get; private set; }
+        /// <summary>"Reklam izle, 3 katı" bu oyunda kullanıldı mı?</summary>
+        public bool RewardBoosted { get; private set; }
+        public int ExtraSlotsBought { get; private set; }
+        private int _endlessCoinsGiven;
+        private readonly System.Collections.Generic.List<BoardState> _history = new System.Collections.Generic.List<BoardState>();
+        private const int MaxHistory = 30;
+        private float _inputLockedUntil;
+        private AdService _ads;
 
         public BoardState State { get; private set; }
         public int LevelNumber { get; private set; }
@@ -84,6 +98,7 @@ namespace HonkAndLoad.Gameplay
             _view = new GameObject("BoardView").AddComponent<BoardView>();
             _view.transform.SetParent(transform, false);
             _feedback = gameObject.AddComponent<Feedback>();
+            _ads = gameObject.AddComponent<AdService>();
             _hud = gameObject.AddComponent<Hud>();
             _hud.Init(this);
         }
@@ -135,6 +150,11 @@ namespace HonkAndLoad.Gameplay
             yield return new WaitForSecondsRealtime(1.0f);
             yield return Shot(prefix + "_1_menu.png");
 
+            _hud.OpenShop();
+            yield return new WaitForSecondsRealtime(0.5f);
+            yield return Shot(prefix + "_1b_market.png");
+            _hud.CloseModals();
+
             _forceTutorial = true;
             StartLevel(1);
             yield return new WaitForSecondsRealtime(1.0f);
@@ -144,6 +164,45 @@ namespace HonkAndLoad.Gameplay
             StartLevel(12);
             yield return new WaitForSecondsRealtime(1.0f);
             yield return Shot(prefix + "_3_oyun.png");
+
+            _hud.OpenBuyDialog(BoosterType.Magnet);
+            yield return new WaitForSecondsRealtime(0.4f);
+            yield return Shot(prefix + "_3b_satinal.png");
+            _hud.CloseModals();
+
+            // Güçlendirici testi: her birini kullan, koli sayısının korunduğunu kontrol et
+            foreach (BoosterType bt in new[] { BoosterType.Undo, BoosterType.Magnet, BoosterType.Shuffle, BoosterType.ExtraSlot })
+                if (Economy.Count(bt) == 0) Economy.AddBooster(bt, 1);
+            Debug.Log("[Test] başlangıç: " + CrateSummary());
+            if (_hint.Valid) { if (_hint.Kind == Tappable.TapKind.Column) HandleColumnTap(_hint.Index); else HandleBufferTap(_hint.Index); }
+            yield return new WaitForSecondsRealtime(0.5f);
+            Debug.Log("[Test] 1 hamle: " + CrateSummary());
+            Debug.Log("[Test] geri al: " + UseBooster(BoosterType.Undo) + " → " + CrateSummary());
+            yield return new WaitForSecondsRealtime(0.5f);
+            Debug.Log("[Test] mıknatıs: " + UseBooster(BoosterType.Magnet));
+            yield return new WaitForSecondsRealtime(1.5f);
+            Debug.Log("[Test] mıknatıs sonrası: " + CrateSummary());
+            yield return Shot(prefix + "_3c_miknatis.png");
+            Debug.Log("[Test] karıştır: " + UseBooster(BoosterType.Shuffle) + " → " + CrateSummary());
+            yield return new WaitForSecondsRealtime(0.8f);
+            yield return Shot(prefix + "_3d_karistir.png");
+            Debug.Log("[Test] +1 raf: " + UseBooster(BoosterType.ExtraSlot) + " raf=" + State.Buffer.Length);
+            yield return new WaitForSecondsRealtime(0.5f);
+            yield return Shot(prefix + "_3e_raf.png");
+
+            // Kazanma ödülü: kolay bölümü ipucuyla bitir
+            int coinsBefore = Economy.Coins;
+            StartLevel(2);
+            for (int i = 0; i < 200 && CurrentPhase == Phase.Playing && _hint.Valid; i++)
+            {
+                if (_hint.Kind == Tappable.TapKind.Column) HandleColumnTap(_hint.Index);
+                else HandleBufferTap(_hint.Index);
+                yield return new WaitForSecondsRealtime(0.05f);
+            }
+            Debug.Log($"[Test] bölüm 2: {CurrentPhase}, ödül {LastReward}, altın {coinsBefore} → {Economy.Coins}");
+            yield return new WaitForSecondsRealtime(2.2f);
+            yield return Shot(prefix + "_5b_odul.png");
+            Progress.CurrentLevel = 11;
 
             SetPhase(Phase.Lost);
             yield return new WaitForSecondsRealtime(1.0f);
@@ -176,6 +235,20 @@ namespace HonkAndLoad.Gameplay
 
             Debug.Log($"[HonkAndLoad] Ekran taraması bitti: {prefix}_*.png");
             UnityEditor.EditorApplication.isPlaying = false;
+        }
+
+        /// <summary>Test: depo + raf + kamyonlardaki koli sayıları (renk başına).</summary>
+        private string CrateSummary()
+        {
+            var counts = new System.Collections.Generic.SortedDictionary<int, int>();
+            void Add(int c) { if (c >= 0) counts[c] = counts.TryGetValue(c, out int n) ? n + 1 : 1; }
+            foreach (var col in State.Columns) foreach (int c in col) Add(c);
+            foreach (int c in State.Buffer) Add(c);
+            int loaded = 0;
+            foreach (Truck t in State.Docks) if (t != null) loaded += t.Load;
+            var sb = new System.Text.StringBuilder();
+            foreach (var kv in counts) sb.Append($"{kv.Key}:{kv.Value} ");
+            return $"{sb}| yüklü {loaded} | giden {State.DepartedTrucks} | raf {State.BufferUsed()}/{State.Buffer.Length}";
         }
 
         private static IEnumerator Shot(string path)
@@ -407,6 +480,7 @@ namespace HonkAndLoad.Gameplay
         /// <summary>Giriş ekranına dön. Oyun alanı temizlenir.</summary>
         public void ShowMenu()
         {
+            _hud.CloseModals();
             SaveEndlessBest();
             StopAllCoroutines();
             _view.Clear();
@@ -430,7 +504,12 @@ namespace HonkAndLoad.Gameplay
             Mode = GameMode.Adventure;
             LevelNumber = Mathf.Max(1, number);
             _levelData = LevelLoader.Load(LevelNumber);
+            // Önce aç: güçlendirici çubuğu görünürse kamera ona göre sığdırılsın
+            var unlocked = VideoMode ? null : Economy.CheckUnlocks(LevelNumber);
             RestartLevel();
+            if (unlocked != null)
+                foreach (Economy.BoosterInfo b in unlocked)
+                    _hud.Banner($"Yeni: {b.Name}!", $"{Economy.UnlockGift} tane hediye. {b.Description}");
         }
 
         public void RestartLevel()
@@ -443,6 +522,7 @@ namespace HonkAndLoad.Gameplay
             StopAllCoroutines();
             State = new BoardState(_levelData);
             SetPhase(Phase.Playing);
+            ResetGameEconomy();
             ExtraSlotsUsed = false;
             Moves = 0;
             _idle = 0f;
@@ -453,7 +533,188 @@ namespace HonkAndLoad.Gameplay
             FitCamera();
         }
 
-        public void NextLevel() => StartLevel(LevelNumber + 1);
+        public void NextLevel()
+        {
+            _ads.MaybeShowInterstitial(LevelNumber);
+            StartLevel(LevelNumber + 1);
+        }
+
+        private void ResetGameEconomy()
+        {
+            _history.Clear();
+            LastReward = 0;
+            RewardBoosted = false;
+            ExtraSlotsBought = 0;
+            _endlessCoinsGiven = 0;
+            _inputLockedUntil = 0f;
+        }
+
+        // ---------- Altın ödülleri ----------
+
+        private void GiveWinReward()
+        {
+            if (VideoMode) return;
+            LastReward = Economy.CoinsForLevel(LevelNumber);
+            Economy.AddCoins(LastReward);
+        }
+
+        private void GiveEndlessReward()
+        {
+            if (VideoMode || Endless == null) return;
+            int total = Economy.CoinsForEndless(Endless.Score);
+            LastReward = total;
+            Economy.AddCoins(total - _endlessCoinsGiven);
+            _endlessCoinsGiven = total;
+        }
+
+        /// <summary>Panel butonu: ödüllü reklam izle, kazanılan altını 3 katına çıkar.</summary>
+        public void BoostRewardWithAd()
+        {
+            if (RewardBoosted || LastReward <= 0) return;
+            _ads.ShowRewarded(ok =>
+            {
+                if (!ok || RewardBoosted) return;
+                RewardBoosted = true;
+                int extra = LastReward * (Economy.RewardedMultiplier - 1);
+                Economy.AddCoins(extra);
+                LastReward += extra;
+                _feedback.Win();
+            });
+        }
+
+        // ---------- Güçlendiriciler ----------
+
+        /// <summary>Güçlendirici şu an kullanılabilir mi; değilse nedeni.</summary>
+        public bool CanUseBooster(BoosterType type, out string reason)
+        {
+            reason = null;
+            Economy.BoosterInfo info = Economy.Info(type);
+            if (State == null || VideoMode) { reason = ""; return false; }
+            if (!Economy.IsUnlocked(type)) { reason = $"Bölüm {info.UnlockLevel}'de açılır"; return false; }
+            if (info.AdventureOnly && Mode == GameMode.Endless) { reason = "Sonsuz modda kullanılamaz"; return false; }
+            bool lostOk = type == BoosterType.Undo && CurrentPhase == Phase.Lost;
+            if (CurrentPhase != Phase.Playing && !lostOk) { reason = ""; return false; }
+            if (Time.time < _inputLockedUntil) { reason = ""; return false; }
+            switch (type)
+            {
+                case BoosterType.Undo:
+                    if (_history.Count == 0) { reason = "Geri alınacak hamle yok"; return false; }
+                    break;
+                case BoosterType.Magnet:
+                    if (State.ChooseMagnetDock() < 0) { reason = "Çekilecek koli yok"; return false; }
+                    break;
+                case BoosterType.Shuffle:
+                    int crates = 0;
+                    foreach (var col in State.Columns) crates += col.Count;
+                    if (crates < 2) { reason = "Karıştırılacak koli yok"; return false; }
+                    break;
+                case BoosterType.ExtraSlot:
+                    if (ExtraSlotsBought >= Economy.MaxExtraSlotsPerGame)
+                    { reason = $"Bir oyunda en fazla {Economy.MaxExtraSlotsPerGame} kez"; return false; }
+                    break;
+            }
+            return true;
+        }
+
+        /// <summary>Envanterden bir adet kullanır. Başarılıysa true.</summary>
+        public bool UseBooster(BoosterType type)
+        {
+            if (!CanUseBooster(type, out _)) return false;
+            if (!Economy.TryConsume(type)) return false;
+            _idle = 0f;
+            switch (type)
+            {
+                case BoosterType.Undo: DoUndo(); break;
+                case BoosterType.Magnet: StartCoroutine(DoMagnet()); break;
+                case BoosterType.Shuffle: DoShuffle(); break;
+                case BoosterType.ExtraSlot: DoExtraSlot(); break;
+            }
+            return true;
+        }
+
+        private void DoUndo()
+        {
+            BoardState previous = _history[_history.Count - 1];
+            _history.RemoveAt(_history.Count - 1);
+            State = previous;
+            Moves = Mathf.Max(0, Moves - 1);
+            _feedback.ResetCombo();
+            _view.Build(State);
+            _view.SetBufferWarning(State.BufferUsed() >= State.Buffer.Length - 1);
+            SetPhase(Phase.Playing);
+            FitCamera();
+            UpdateHint();
+            _hud.Popup("Geri alındı", _view.BufferWorld(0), Color.white, 0f);
+        }
+
+        private IEnumerator DoMagnet()
+        {
+            int dock = State.ChooseMagnetDock();
+            int color = State.Docks[dock].Color;
+            _history.Clear();
+            var pulls = State.MagnetPull(dock);
+            _inputLockedUntil = Time.time + 0.2f * pulls.Count + 0.4f;
+            _view.MagnetBurst(dock, color);
+            _hud.Popup("Mıknatıs!", _view.DockWorld(dock), Palette.Warning, 0f);
+            for (int i = 0; i < pulls.Count; i++)
+            {
+                _view.Apply(pulls[i]);
+                AfterMove(pulls[i], false, i == pulls.Count - 1);
+                yield return new WaitForSeconds(0.2f);
+            }
+        }
+
+        private void DoShuffle()
+        {
+            _history.Clear();
+            var rng = new System.Random(System.Environment.TickCount);
+            BoardState best = null;
+            int bestScore = int.MinValue;
+            for (int i = 0; i < 24; i++)
+            {
+                BoardState candidate = State.Clone();
+                candidate.ShuffleColumns(rng);
+                int score = candidate.DirectFrontCount() * 10 + rng.Next(5);
+                if (Mode == GameMode.Adventure && LevelSolver.IsSolvableFrom(candidate)) score += 1000;
+                if (score > bestScore) { bestScore = score; best = candidate; }
+            }
+            for (int c = 0; c < State.Columns.Count; c++)
+            {
+                State.Columns[c].Clear();
+                State.Columns[c].AddRange(best.Columns[c]);
+            }
+            _feedback.ResetCombo();
+            _view.RebuildColumns();
+            _inputLockedUntil = Time.time + 0.4f;
+            UpdateHint();
+        }
+
+        private void DoExtraSlot()
+        {
+            _history.Clear();
+            ExtraSlotsBought++;
+            State.AddBufferSlots(1);
+            _view.RebuildBuffer();
+            _view.SetBufferWarning(State.BufferUsed() >= State.Buffer.Length - 1);
+            FitCamera();
+            UpdateHint();
+        }
+
+        /// <summary>Kaybedince altınla +3 slot.</summary>
+        public bool ReviveWithCoins()
+        {
+            if (CurrentPhase != Phase.Lost || ExtraSlotsUsed) return false;
+            if (!Economy.TrySpend(ReviveCoinPrice)) return false;
+            GrantExtraSlots();
+            return true;
+        }
+
+        /// <summary>Kaybedince ödüllü reklamla +3 slot.</summary>
+        public void ReviveWithAd()
+        {
+            if (CurrentPhase != Phase.Lost || ExtraSlotsUsed) return;
+            _ads.ShowRewarded(ok => { if (ok) GrantExtraSlots(); });
+        }
 
         // ---------- Sonsuz mod ----------
 
@@ -471,6 +732,7 @@ namespace HonkAndLoad.Gameplay
             RecordAtStart = Progress.EndlessBest;
             NewRecord = false;
             SetPhase(Phase.Playing);
+            ResetGameEconomy();
             ExtraSlotsUsed = false;
             Moves = 0;
             _idle = 0f;
@@ -490,6 +752,8 @@ namespace HonkAndLoad.Gameplay
                 Progress.EndlessBest = Endless.Score;
                 NewRecord = true;
             }
+            // Oyun bitince ya da yarıda bırakılınca puan kadar altın (yalnızca fark verilir)
+            GiveEndlessReward();
         }
 
         private void AfterEndlessMove(MoveResult move)
@@ -515,11 +779,12 @@ namespace HonkAndLoad.Gameplay
             }
         }
 
-        /// <summary>Kayıp ekranındaki "+3 slot" (ileride ödüllü reklamdan sonra çağrılacak).</summary>
-        public void GrantExtraSlots()
+        /// <summary>Kayıp ekranındaki "+3 slot": reklam ya da altın karşılığında.</summary>
+        private void GrantExtraSlots()
         {
             if (CurrentPhase != Phase.Lost || ExtraSlotsUsed) return;
             ExtraSlotsUsed = true;
+            _history.Clear();
             State.AddBufferSlots(ExtraSlotsReward);
             State.Revive();
             _view.RebuildBuffer();
@@ -549,11 +814,16 @@ namespace HonkAndLoad.Gameplay
             if (CurrentPhase == Phase.Playing) _idle += Time.deltaTime;
 #if ENABLE_LEGACY_INPUT_MANAGER
             // Android geri tuşu / Escape: oyundan giriş ekranına dön
-            if (CurrentPhase != Phase.Menu && Input.GetKeyDown(KeyCode.Escape)) { ShowMenu(); return; }
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (_hud.HandleBack()) return;
+                if (CurrentPhase != Phase.Menu) { ShowMenu(); return; }
+            }
 #endif
             if (CurrentPhase != Phase.Playing) return;
             if (!TryGetTap(out Vector2 screenPos)) return;
-            if (Hud.IsPointerOverHud(screenPos)) return;
+            if (Hud.IsPointerOverHud(screenPos) || Hud.ModalOpen) return;
+            if (_ads.IsShowing || Time.time < _inputLockedUntil) return;
 
             Ray ray = _camera.ScreenPointToRay(screenPos);
             if (!Physics.Raycast(ray, out RaycastHit hit, 200f)) return;
@@ -586,6 +856,7 @@ namespace HonkAndLoad.Gameplay
 
         private void HandleColumnTap(int column)
         {
+            BoardState before = Mode == GameMode.Adventure ? State.Clone() : null;
             MoveResult move = State.TapColumn(column);
             if (move == null)
             {
@@ -593,11 +864,13 @@ namespace HonkAndLoad.Gameplay
                 _feedback.Invalid();
                 return;
             }
+            if (before != null) { _history.Add(before); if (_history.Count > MaxHistory) _history.RemoveAt(0); }
             AfterMove(move);
         }
 
         private void HandleBufferTap(int slot)
         {
+            BoardState before = Mode == GameMode.Adventure ? State.Clone() : null;
             MoveResult move = State.TapBuffer(slot);
             if (move == null)
             {
@@ -605,13 +878,14 @@ namespace HonkAndLoad.Gameplay
                 _feedback.Invalid();
                 return;
             }
+            if (before != null) { _history.Add(before); if (_history.Count > MaxHistory) _history.RemoveAt(0); }
             AfterMove(move);
         }
 
-        private void AfterMove(MoveResult move)
+        private void AfterMove(MoveResult move, bool applyView = true, bool checkEnd = true)
         {
             Moves++;
-            _view.Apply(move);
+            if (applyView) _view.Apply(move);
             if (Mode == GameMode.Endless) AfterEndlessMove(move);
             if (move.ToDock >= 0)
             {
@@ -644,12 +918,14 @@ namespace HonkAndLoad.Gameplay
             });
 
             _view.SetBufferWarning(State.BufferUsed() >= State.Buffer.Length - 1);
+            if (!checkEnd) return;
 
             if (State.IsWon())
             {
                 SetPhase(Phase.Won);
                 Progress.CurrentLevel = LevelNumber + 1; // ilerleme hemen kaydedilir
                 if (LevelNumber == 1) Progress.TutorialDone = true;
+                GiveWinReward();
                 StartCoroutine(Delayed(0.6f, _feedback.Win));
                 _view.PlayWinCelebration(ConvoyColors());
                 StartCoroutine(Delayed(0.9f, _feedback.TruckDeparts));
@@ -796,6 +1072,7 @@ namespace HonkAndLoad.Gameplay
             float bottomFrac = Mathf.Clamp(Screen.safeArea.y / Screen.height + 0.02f, 0f, 0.2f);
             // Reklam videosu: Instagram/Shorts alt %20'sini açıklama ve butonlar kaplar
             if (VideoMode) bottomFrac = Mathf.Max(bottomFrac, 0.15f);
+            else bottomFrac = Mathf.Clamp(bottomFrac + Hud.BottomReservedPixels(this) / Screen.height, 0f, 0.3f);
             float band = 1f - topFrac - bottomFrac;
 
             float halfHeight = (maxU - minU) / 2f;

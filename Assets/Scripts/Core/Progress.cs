@@ -43,6 +43,41 @@ namespace HonkAndLoad.Core
             set { PlayerPrefs.SetInt(TutorialKey, value ? 1 : 0); PlayerPrefs.Save(); }
         }
 
+        // ---------- Ekonomi (altın, güçlendirici, satın alımlar) ----------
+
+        private const string CoinsKey = "hal_coins";
+        private const string NoAdsKey = "hal_no_ads";
+        public const int StartingCoins = 100;
+
+        public static int Coins
+        {
+            get => PlayerPrefs.GetInt(CoinsKey, StartingCoins);
+            set { PlayerPrefs.SetInt(CoinsKey, Mathf.Max(0, value)); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>"Reklamsız" satın alındı: bölüm arası reklamlar gösterilmez.</summary>
+        public static bool NoAds
+        {
+            get => PlayerPrefs.GetInt(NoAdsKey, 0) == 1;
+            set { PlayerPrefs.SetInt(NoAdsKey, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        public static int GetInt(string key, int fallback = 0) => PlayerPrefs.GetInt("hal_" + key, fallback);
+
+        public static void SetInt(string key, int value)
+        {
+            PlayerPrefs.SetInt("hal_" + key, value);
+            PlayerPrefs.Save();
+        }
+
+        public static string GetString(string key) => PlayerPrefs.GetString("hal_" + key, "");
+
+        public static void SetString(string key, string value)
+        {
+            PlayerPrefs.SetString("hal_" + key, value);
+            PlayerPrefs.Save();
+        }
+
         /// <summary>Bölüm ilerlemesini ve öğreticiyi sıfırlar; ses ve titreşim ayarları korunur.</summary>
         public static void ResetLevels()
         {

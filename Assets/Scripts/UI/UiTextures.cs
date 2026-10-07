@@ -166,6 +166,115 @@ namespace HonkAndLoad.UI
             return Mathf.Abs(f) / grad < 0.11f;
         });
 
+        // ---------- Ekonomi ikonları ----------
+
+        private static float Seg(float u, float v, float ax, float ay, float bx, float by)
+        {
+            float px = u - ax, py = v - ay, dx = bx - ax, dy = by - ay;
+            float t = Mathf.Clamp01((px * dx + py * dy) / (dx * dx + dy * dy));
+            float ex = px - dx * t, ey = py - dy * t;
+            return Mathf.Sqrt(ex * ex + ey * ey);
+        }
+
+        private static bool Tri(float u, float v, Vector2 a, Vector2 b, Vector2 c)
+        {
+            float d1 = (u - b.x) * (a.y - b.y) - (a.x - b.x) * (v - b.y);
+            float d2 = (u - c.x) * (b.y - c.y) - (b.x - c.x) * (v - c.y);
+            float d3 = (u - a.x) * (c.y - a.y) - (c.x - a.x) * (v - a.y);
+            bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+            return !(neg && pos);
+        }
+
+        /// <summary>Altın: sarı disk, koyu iç halka, parlama.</summary>
+        public Texture2D Coin(int size = 96)
+        {
+            var t = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var px = new Color[size * size];
+            Color rim = new Color(0.85f, 0.55f, 0.05f), face = new Color(1f, 0.80f, 0.18f), inner = new Color(0.95f, 0.66f, 0.08f);
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float u = (x + 0.5f) / size * 2f - 1f, v = (y + 0.5f) / size * 2f - 1f;
+                    float r = Mathf.Sqrt(u * u + v * v);
+                    float a = Mathf.Clamp01((0.97f - r) * size * 0.5f);
+                    Color c = r > 0.82f ? rim : (r > 0.62f && r < 0.7f ? inner : face);
+                    if (r < 0.62f && u - v < -0.25f && u - v > -0.55f) c = Color.Lerp(c, Color.white, 0.55f);
+                    c.a = a;
+                    px[y * size + x] = c;
+                }
+            t.SetPixels(px);
+            t.Apply();
+            return Track(t);
+        }
+
+        /// <summary>Alışveriş çantası (Market).</summary>
+        public Texture2D Bag() => Icon(128, (u, v) =>
+        {
+            // Aşağı doğru genişleyen gövde, üstte ince sap, ortada iki delik
+            float half = Mathf.Lerp(0.78f, 0.58f, (v + 0.85f) / 1.05f);
+            bool body = v > -0.85f && v < 0.2f && Mathf.Abs(u) < half;
+            float r = Mathf.Sqrt(u * u + (v - 0.2f) * (v - 0.2f));
+            bool handle = v > 0.2f && r > 0.24f && r < 0.36f;
+            bool holes = Mathf.Abs(Mathf.Abs(u) - 0.3f) < 0.07f && v > -0.05f && v < 0.08f;
+            return (body && !holes) || handle;
+        });
+
+        /// <summary>Geri al: kıvrık ok (sol uçta aşağı bakan ok başı).</summary>
+        public Texture2D Undo() => Icon(128, (u, v) =>
+        {
+            float cx = 0.12f, cy = -0.05f;
+            float dx = u - cx, dy = v - cy;
+            float r = Mathf.Sqrt(dx * dx + dy * dy);
+            float ang = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
+            bool arc = r > 0.4f && r < 0.66f && ang > -55f;
+            bool head = Tri(u, v, new Vector2(cx - 0.9f, cy + 0.02f), new Vector2(cx - 0.16f, cy + 0.02f), new Vector2(cx - 0.53f, cy - 0.45f));
+            return arc || head;
+        });
+
+        /// <summary>Mıknatıs: U şekli, uçları ayrık.</summary>
+        public Texture2D Magnet() => Icon(128, (u, v) =>
+        {
+            float cy = -0.05f;
+            float r = Mathf.Sqrt(u * u + (v - cy) * (v - cy));
+            bool bottom = v <= cy && r > 0.3f && r < 0.78f;
+            bool legs = v > cy && v < 0.85f && Mathf.Abs(u) > 0.3f && Mathf.Abs(u) < 0.78f;
+            bool gap = v > 0.5f && v < 0.6f;
+            return (bottom || legs) && !gap;
+        });
+
+        /// <summary>Karıştır: çapraz iki ok.</summary>
+        public Texture2D Shuffle() => Icon(128, (u, v) =>
+        {
+            bool a = Seg(u, v, -0.85f, -0.55f, 0.45f, 0.55f) < 0.12f;
+            bool b = Seg(u, v, -0.85f, 0.55f, 0.45f, -0.55f) < 0.12f;
+            bool h1 = Tri(u, v, new Vector2(0.95f, 0.55f), new Vector2(0.4f, 0.9f), new Vector2(0.4f, 0.2f));
+            bool h2 = Tri(u, v, new Vector2(0.95f, -0.55f), new Vector2(0.4f, -0.2f), new Vector2(0.4f, -0.9f));
+            return a || b || h1 || h2;
+        });
+
+        public Texture2D Plus() => Icon(96, (u, v) =>
+            (Mathf.Abs(u) < 0.2f && Mathf.Abs(v) < 0.8f) || (Mathf.Abs(v) < 0.2f && Mathf.Abs(u) < 0.8f));
+
+        public Texture2D Close() => Icon(96, (u, v) =>
+            Seg(u, v, -0.6f, -0.6f, 0.6f, 0.6f) < 0.16f || Seg(u, v, -0.6f, 0.6f, 0.6f, -0.6f) < 0.16f);
+
+        public Texture2D Lock() => Icon(96, (u, v) =>
+        {
+            bool body = u > -0.62f && u < 0.62f && v > -0.85f && v < 0.1f;
+            float r = Mathf.Sqrt(u * u + (v - 0.1f) * (v - 0.1f));
+            bool shackle = v > 0.1f && r > 0.28f && r < 0.46f;
+            return body || shackle;
+        });
+
+        /// <summary>Reklam: oynat düğmeli ekran.</summary>
+        public Texture2D AdIcon() => Icon(96, (u, v) =>
+        {
+            bool frame = Mathf.Abs(u) < 0.9f && Mathf.Abs(v) < 0.65f;
+            bool inside = Mathf.Abs(u) < 0.74f && Mathf.Abs(v) < 0.5f;
+            bool play = Tri(u, v, new Vector2(-0.22f, 0.32f), new Vector2(-0.22f, -0.32f), new Vector2(0.35f, 0f));
+            return (frame && !inside) || play;
+        });
+
         public void Dispose()
         {
             foreach (Texture2D t in _owned) if (t != null) UnityEngine.Object.Destroy(t);

@@ -11,7 +11,7 @@ namespace HonkAndLoad.UI
     /// Aşama 3'te uGUI / UI Toolkit ile değiştirilecek.
     /// 1080 px genişliğe göre tasarlanır ve ekrana göre ölçeklenir.
     /// </summary>
-    public class Hud : MonoBehaviour
+    public partial class Hud : MonoBehaviour
     {
         private const float DesignWidth = 1080f;
         private const string Version = "v0.1 prototip";
@@ -69,6 +69,32 @@ namespace HonkAndLoad.UI
         private Vector3 _tapWorld;
         private float _tapTime = -10f;
 
+        // Ekonomi arayüzü: market, güçlendirici çubuğu, satın alma penceresi
+        public static bool ModalOpen;
+        public const float BoosterBarHeight = 180f;
+        private bool _shopOpen;
+        private int _buyDialog = -1;
+        private string _toastText;
+        private float _toastStart = -10f;
+        private const float ToastLife = 2.0f;
+        private float _coinShown = -1f;
+        private Texture2D _coinTex, _bagTex, _closeTex, _lockTex, _adTex, _plusTex, _whiteRound, _darkRound, _cardShine;
+        private Texture2D[] _boosterIcons;
+        private GUIStyle _coinText, _cardBlue, _cardPurple, _cardGold, _tile, _tileOn, _boosterName, _countBadge, _priceBadge,
+            _shopTitle, _itemTitle, _itemSub, _priceButton, _priceButtonText, _blueButton, _goldButton, _toast, _sectionLabel, _cardBadge;
+
+        public void Toast(string text)
+        {
+            _toastText = text;
+            _toastStart = Time.time;
+        }
+
+        public void OpenShop()
+        {
+            _shopOpen = true;
+            _buyDialog = -1;
+        }
+
         // Bu karede çizilen arayüz alanları (ekran koordinatı, y aşağıdan yukarı)
         private static readonly List<Rect> HudRects = new List<Rect>();
 
@@ -90,6 +116,19 @@ namespace HonkAndLoad.UI
             float reserved = TopBarHeight + 140f; // bar + zorluk çubuğu + "Raf dolmak üzere" yazısı
             return SafeTopInsetPixels() + reserved * scale;
         }
+
+        /// <summary>Güçlendirici çubuğu görünüyor mu (en az biri açıldıysa, oyun sırasında).</summary>
+        public static bool BoosterBarVisible(GameController g)
+        {
+            if (g == null || g.VideoMode || g.State == null) return false;
+            foreach (Economy.BoosterInfo b in Economy.Boosters)
+                if (Economy.IsUnlocked(b.Type)) return true;
+            return false;
+        }
+
+        /// <summary>Kameranın oyun alanını yerleştirmemesi gereken alt bölge (piksel).</summary>
+        public static float BottomReservedPixels(GameController g) =>
+            BoosterBarVisible(g) ? (BoosterBarHeight + 30f) * Screen.width / DesignWidth : 0f;
 
         /// <summary>Kamera sığdırma için: oyun video modunda mı?</summary>
         public static bool IsVideo;
@@ -181,6 +220,63 @@ namespace HonkAndLoad.UI
             _newBadge = Text(34, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
             _newBadge.normal.background = _ui.Pill(new Color(0.93f, 0.2f, 0.32f));
             _newBadge.border = new RectOffset(48, 48, 48, 48);
+
+            BuildEconomySkin(cardBorder);
+        }
+
+        private void BuildEconomySkin(RectOffset cardBorder)
+        {
+            _coinTex = _ui.Coin();
+            _bagTex = _ui.Bag();
+            _closeTex = _ui.Close();
+            _lockTex = _ui.Lock();
+            _adTex = _ui.AdIcon();
+            _plusTex = _ui.Plus();
+            _boosterIcons = new[] { _ui.Undo(), _ui.Magnet(), _ui.Shuffle(), _ui.Plus() };
+            _whiteRound = _ui.RoundedFlat(Color.white, 96, 30);
+            _darkRound = _ui.RoundedFlat(new Color(0.05f, 0.08f, 0.2f, 0.45f), 96, 30);
+
+            _cardBlue = CardStyle(_ui.RoundedCard(new Color(0.42f, 0.66f, 1f), new Color(0.2f, 0.38f, 0.9f)),
+                                  _ui.RoundedCard(new Color(0.34f, 0.56f, 0.9f), new Color(0.16f, 0.3f, 0.78f)), cardBorder);
+            _cardPurple = CardStyle(_ui.RoundedCard(new Color(0.78f, 0.5f, 1f), new Color(0.5f, 0.26f, 0.86f)),
+                                    _ui.RoundedCard(new Color(0.68f, 0.42f, 0.9f), new Color(0.42f, 0.2f, 0.74f)), cardBorder);
+            _cardGold = CardStyle(_ui.RoundedCard(new Color(1f, 0.86f, 0.35f), new Color(0.96f, 0.62f, 0.1f)),
+                                  _ui.RoundedCard(new Color(0.92f, 0.76f, 0.3f), new Color(0.86f, 0.52f, 0.06f)), cardBorder);
+
+            var tileBorder = new RectOffset(30, 30, 30, 30);
+            _tile = new GUIStyle { border = tileBorder };
+            _tile.normal.background = _ui.RoundedFlat(new Color(1f, 1f, 1f, 0.2f), 96, 30);
+            _tile.active.background = _ui.RoundedFlat(new Color(1f, 1f, 1f, 0.32f), 96, 30);
+            _tileOn = new GUIStyle { border = tileBorder };
+            _tileOn.normal.background = _ui.RoundedFlat(new Color(1f, 1f, 1f, 0.95f), 96, 30);
+            _tileOn.active.background = _ui.RoundedFlat(new Color(0.85f, 0.88f, 0.95f, 0.95f), 96, 30);
+
+            _coinText = Text(44, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
+            _boosterName = Text(30, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.15f, 0.22f, 0.45f));
+            _countBadge = Text(34, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _countBadge.normal.background = _ui.Pill(new Color(0.93f, 0.2f, 0.32f));
+            _countBadge.border = new RectOffset(48, 48, 48, 48);
+            _priceBadge = Text(30, FontStyle.Bold, TextAnchor.MiddleRight, new Color(0.35f, 0.2f, 0f));
+            _priceBadge.normal.background = _ui.Pill(new Color(1f, 0.85f, 0.3f));
+            _priceBadge.border = new RectOffset(48, 48, 48, 48);
+            _priceBadge.padding = new RectOffset(10, 18, 0, 0);
+            _shopTitle = Text(84, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _itemTitle = Text(52, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
+            _itemSub = Text(32, FontStyle.Normal, TextAnchor.UpperLeft, new Color(1f, 1f, 1f, 0.92f));
+            _sectionLabel = Text(38, FontStyle.Bold, TextAnchor.MiddleLeft, new Color(1f, 1f, 1f, 0.9f));
+            _priceButton = new GUIStyle { border = new RectOffset(48, 48, 48, 48) };
+            _priceButton.normal.background = _ui.Pill(Color.white);
+            _priceButton.active.background = _ui.Pill(new Color(0.85f, 0.88f, 0.95f));
+            _priceButtonText = Text(40, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.15f, 0.22f, 0.45f));
+            _blueButton = ButtonStyle(new Color(0.22f, 0.45f, 0.9f), 42);
+            _goldButton = ButtonStyle(new Color(0.95f, 0.6f, 0.08f), 42);
+            _toast = Text(38, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _toast.normal.background = _ui.Pill(new Color(0.05f, 0.08f, 0.2f, 0.88f));
+            _toast.border = new RectOffset(48, 48, 48, 48);
+            _toast.padding = new RectOffset(40, 40, 10, 10);
+            _cardBadge = Text(28, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+            _cardBadge.normal.background = _ui.Pill(new Color(0.93f, 0.2f, 0.32f));
+            _cardBadge.border = new RectOffset(48, 48, 48, 48);
         }
 
         private static GUIStyle CardStyle(Texture2D normal, Texture2D pressed, RectOffset border)
@@ -504,6 +600,7 @@ namespace HonkAndLoad.UI
             {
                 // Alt kısımda: kamyonları ve dokunulacak koliyi kapatmasın
                 float bottomInset = Screen.safeArea.y / _scale;
+                if (BoosterBarVisible(_game)) bottomInset += BoosterBarHeight + 10f;
                 Rect r = new Rect(60, h - bottomInset - 240, w - 120, 190);
                 GUI.Label(r, text, _bubble);
             }
@@ -522,9 +619,17 @@ namespace HonkAndLoad.UI
             float w = DesignWidth;
             float h = Screen.height / _scale;
 
+            AdService ads = AdService.Instance;
+            bool adShowing = ads != null && ads.IsShowing;
+            ModalOpen = _shopOpen || _buyDialog >= 0 || adShowing;
+
             if (_game.CurrentPhase == GameController.Phase.Menu)
             {
-                DrawMenu(w, h);
+                GUI.enabled = !adShowing;
+                if (_shopOpen) DrawShop(w, h);
+                else DrawMenu(w, h);
+                GUI.enabled = true;
+                DrawOverlays(w, h, adShowing);
                 return;
             }
             if (_game.State == null) return;
@@ -535,14 +640,22 @@ namespace HonkAndLoad.UI
                 return;
             }
 
+            // Pencere açıkken alttaki butonlar tıklamayı yakalamasın
+            GUI.enabled = !ModalOpen;
             float inset = SafeTopInsetPixels() / _scale;
             DrawTopBar(w, inset);
             DrawHint(w, h);
+            if (_game.CurrentPhase == GameController.Phase.Playing && BoosterBarVisible(_game)) DrawBoosterBar(w, h);
             DrawPopups();
             DrawBanner(w, h);
             // Kazanınca önce konvoy ve konfeti oynasın, panel biraz sonra gelsin
             if (_game.CurrentPhase == GameController.Phase.Won && _game.PhaseTime > 1.6f) DrawWin(w, h);
             else if (_game.CurrentPhase == GameController.Phase.Lost && _game.PhaseTime > 0.4f) DrawLose(w, h);
+            GUI.enabled = !adShowing;
+            if (_buyDialog >= 0) DrawBuyDialog(w, h);
+            if (_shopOpen) DrawShop(w, h);
+            GUI.enabled = true;
+            DrawOverlays(w, h, adShowing);
         }
 
         private void DrawMenu(float w, float h)
@@ -568,8 +681,13 @@ namespace HonkAndLoad.UI
             }
             GUI.color = old;
 
+            // Üst sıra: altın ve market
+            float rowY = SafeTopInsetPixels() / _scale + 30f;
+            if (CoinPill(new Rect(40, rowY, 300, 96))) OpenShop();
+            if (MarketButton(new Rect(w - 40 - 290, rowY, 290, 96))) OpenShop();
+
             // Başlık
-            float titleY = Mathf.Max(SafeTopInsetPixels() / _scale + 40f, h * 0.09f);
+            float titleY = Mathf.Max(SafeTopInsetPixels() / _scale + 150f, h * 0.09f);
             GUI.Label(new Rect(0, titleY + 10, w, 170), "Honk & Load!", _heroTitleShadow);
             GUI.Label(new Rect(0, titleY, w, 170), "Honk & Load!", _heroTitle);
             GUI.Label(new Rect(60, titleY + 165, w - 120, 60), "Kolileri yükle, kamyonları yolla!", _subtitle);
@@ -710,7 +828,7 @@ namespace HonkAndLoad.UI
                 GUI.Label(new Rect(290, y, 300, 90), $"Kamyon: {s.TotalTrucks - s.DepartedTrucks}", _label);
             }
 
-            if (GUI.Button(new Rect(w - 490, y, 210, 90), "Menü", _secondary)) _game.ShowMenu();
+            if (GUI.Button(new Rect(w - 490, y, 210, 90), "Menü", _secondary)) { _shopOpen = false; _buyDialog = -1; _game.ShowMenu(); }
             if (_game.State != null && GUI.Button(new Rect(w - 260, y, 220, 90), "Baştan", _button)) _game.RestartLevel();
 
             float below = inset + TopBarHeight + 10;
@@ -737,29 +855,55 @@ namespace HonkAndLoad.UI
 
         private void DrawWin(float w, float h)
         {
-            Rect panel = new Rect(90, h / 2 - 300, w - 180, 600);
+            int nextSlots = LevelGenerator.BufferSizeFor(_game.LevelNumber + 1);
+            bool newSlot = nextSlots > LevelGenerator.BufferSizeFor(_game.LevelNumber);
+            bool canBoost = !_game.RewardBoosted && _game.LastReward > 0;
+            float panelH = 640f + (newSlot ? 70f : 0f) + (canBoost ? 150f : 0f);
+            Rect panel = new Rect(90, h / 2 - panelH / 2, w - 180, panelH);
             GUI.Box(panel, GUIContent.none, _panel);
             Track(panel);
-            GUI.Label(new Rect(panel.x, panel.y + 50, panel.width, 100), "Teslimat tamam!", _title);
-            GUI.Label(new Rect(panel.x + 60, panel.y + 160, panel.width - 120, 80),
-                $"{_game.Moves} hamlede bitirdin", _label);
-
-            int nextSlots = LevelGenerator.BufferSizeFor(_game.LevelNumber + 1);
-            if (nextSlots > LevelGenerator.BufferSizeFor(_game.LevelNumber))
-                GUI.Label(new Rect(panel.x + 60, panel.y + 230, panel.width - 120, 80),
-                    $"Yeni raf slotu açıldı! Artık {nextSlots} slot.", _label);
-
-            if (GUI.Button(new Rect(panel.x + 100, panel.y + 340, panel.width - 200, 120), "Sonraki Bölüm", _button))
+            float y = panel.y + 40;
+            GUI.Label(new Rect(panel.x, y, panel.width, 100), "Teslimat tamam!", _title);
+            y += 110;
+            GUI.Label(new Rect(panel.x, y, panel.width, 60), $"{_game.Moves} hamlede bitirdin", _cardDesc);
+            y += 80;
+            RewardRow(new Rect(panel.x, y, panel.width, 100), _game.LastReward, _game.RewardBoosted);
+            y += 120;
+            if (newSlot)
+            {
+                GUI.Label(new Rect(panel.x + 40, y, panel.width - 80, 60), $"Yeni raf slotu açıldı! Artık {nextSlots} slot.", _cardDesc);
+                y += 70;
+            }
+            if (canBoost)
+            {
+                if (IconButton(new Rect(panel.x + 100, y, panel.width - 200, 120), _adTex,
+                        $"Reklam izle: {Economy.RewardedMultiplier} katı", _blueButton))
+                    _game.BoostRewardWithAd();
+                y += 150;
+            }
+            if (GUI.Button(new Rect(panel.x + 100, y, panel.width - 200, 120), "Sonraki Bölüm", _button))
                 _game.NextLevel();
-            if (GUI.Button(new Rect(panel.x + 200, panel.y + 480, panel.width - 400, 80), "Menü", _secondary))
+            y += 140;
+            if (GUI.Button(new Rect(panel.x + 200, y, panel.width - 400, 80), "Menü", _secondary))
                 _game.ShowMenu();
         }
 
         private void DrawLose(float w, float h)
         {
             bool endless = _game.Mode == GameController.GameMode.Endless && _game.Endless != null;
-            float panelH = endless ? 900f : 600f;
-            Rect panel = new Rect(90, h / 2 - panelH / 2, w - 180, panelH);
+            bool canRevive = !_game.ExtraSlotsUsed;
+            bool canUndo = !endless && Economy.IsUnlocked(BoosterType.Undo) && _game.CanUseBooster(BoosterType.Undo, out _);
+            bool canBoost = endless && !_game.RewardBoosted && _game.LastReward > 0;
+
+            float panelH = endless ? 500f : 200f;
+            if (endless) panelH += 110f;           // altın satırı
+            if (canBoost) panelH += 140f;
+            if (canUndo) panelH += 140f;
+            if (canRevive) panelH += 190f;
+            panelH += 140f;                        // tekrar
+            if (endless) panelH += 110f;           // menü
+            panelH = Mathf.Min(panelH, h - 2 * (SafeTopInsetPixels() / _scale) - 40f);
+            Rect panel = new Rect(70, h / 2 - panelH / 2, w - 140, panelH);
             GUI.Box(panel, GUIContent.none, _panel);
             Track(panel);
 
@@ -776,29 +920,53 @@ namespace HonkAndLoad.UI
                 GUI.color = old;
                 GUI.Label(new Rect(panel.x, panel.y + 360, panel.width, 60),
                     $"{d.TrucksSent} kamyon  ·  Zorluk {d.Tier + 1}", _cardDesc);
-                y = panel.y + 450;
+                y = panel.y + 440;
+                RewardRow(new Rect(panel.x, y, panel.width, 90), _game.LastReward, _game.RewardBoosted);
+                y += 110;
             }
             else
             {
                 GUI.Label(new Rect(panel.x, panel.y + 50, panel.width, 100), "Raf doldu!", _title);
-                y = panel.y + 200;
+                y = panel.y + 190;
             }
 
-            if (!_game.ExtraSlotsUsed)
+            float bx = panel.x + 70, bw = panel.width - 140;
+            if (canBoost)
             {
-                // TODO (Aşama 3): önce ödüllü reklam göster, izlenince slot ver
-                if (GUI.Button(new Rect(panel.x + 100, y, panel.width - 200, 120), "+3 Slot (Reklam)", _button))
-                    _game.GrantExtraSlots();
-                y += 150;
+                if (IconButton(new Rect(bx, y, bw, 115), _adTex, $"Reklam izle: altın {Economy.RewardedMultiplier} katı", _blueButton))
+                    _game.BoostRewardWithAd();
+                y += 140;
             }
-            if (GUI.Button(new Rect(panel.x + 100, y, panel.width - 200, 120), endless ? "Tekrar Oyna" : "Tekrar Dene", _button))
+            if (canUndo)
+            {
+                int n = Economy.Count(BoosterType.Undo);
+                string label = n > 0 ? $"Son hamleyi geri al ({n})" : $"Son hamleyi geri al · {Economy.Info(BoosterType.Undo).Price}";
+                if (IconButton(new Rect(bx, y, bw, 115), _boosterIcons[(int)BoosterType.Undo], label, _goldButton))
+                    TapBooster(BoosterType.Undo);
+                y += 140;
+            }
+            if (canRevive)
+            {
+                GUI.Label(new Rect(panel.x, y - 10, panel.width, 50), $"Rafa {GameController.ExtraSlotsReward} yer ekle, devam et:", _cardDesc);
+                y += 45;
+                float half = (bw - 24) / 2;
+                if (IconButton(new Rect(bx, y, half, 115), _adTex, "Reklam", _blueButton))
+                    _game.ReviveWithAd();
+                if (IconButton(new Rect(bx + half + 24, y, half, 115), _coinTex, $"{GameController.ReviveCoinPrice}", _goldButton))
+                {
+                    if (!_game.ReviveWithCoins())
+                    {
+                        Toast("Altının yetmiyor");
+                        OpenShop();
+                    }
+                }
+                y += 145;
+            }
+            if (GUI.Button(new Rect(bx, y, bw, 115), endless ? "Tekrar Oyna" : "Tekrar Dene", _button))
                 _game.RestartLevel();
-            if (endless)
-            {
-                y += 150;
-                if (GUI.Button(new Rect(panel.x + 200, y, panel.width - 400, 80), "Menü", _secondary))
-                    _game.ShowMenu();
-            }
+            y += 140;
+            if (endless && GUI.Button(new Rect(panel.x + 200, y, panel.width - 400, 80), "Menü", _secondary))
+                _game.ShowMenu();
         }
 
         /// <summary>GUI koordinatındaki alanı dokunma kontrolü için ekran koordinatına çevirir.</summary>

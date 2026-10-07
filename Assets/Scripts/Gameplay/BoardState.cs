@@ -21,6 +21,7 @@ namespace HonkAndLoad.Gameplay
     {
         public int Color;
         public int FromColumn = -1;   // depodan alındıysa sütun
+        public int FromDepth;         // sütunda kaçıncı sıradan (0 = en ön; mıknatıs derinden çeker)
         public int FromBuffer = -1;   // raftan alındıysa slot
         public int ToDock = -1;       // kamyona yüklendiyse rampa
         public int ToBuffer = -1;     // rafa gittiyse slot
@@ -220,6 +221,111 @@ namespace HonkAndLoad.Gameplay
                 LoadInto(dock, auto); // kendi zincirini auto.AutoLoads içine yazar
                 s = -1; // raf değişti, baştan tara
             }
+        }
+
+        // ---------- Güçlendiriciler ----------
+
+        /// <summary>
+        /// Mıknatıs için en faydalı rampa: eksik kolilerinden en çoğu depoda olan,
+        /// eşitlikte kolileri en derinde olan kamyon. Uygun yoksa -1.
+        /// </summary>
+        public int ChooseMagnetDock()
+        {
+            int best = -1, bestGain = 0, bestDepth = -1;
+            for (int d = 0; d < Docks.Length; d++)
+            {
+                Truck t = Docks[d];
+                if (t == null || t.IsFull) continue;
+                int need = t.Capacity - t.Load;
+                var depths = new List<int>();
+                foreach (List<int> col in Columns)
+                    for (int i = 0; i < col.Count; i++)
+                        if (col[i] == t.Color) depths.Add(col.Count - 1 - i);
+                foreach (int b in Buffer) if (b == t.Color) depths.Add(0);
+                depths.Sort((a, b) => b.CompareTo(a)); // derinler önce
+                int gain = System.Math.Min(need, depths.Count);
+                int depthSum = 0;
+                for (int i = 0; i < gain; i++) depthSum += depths[i];
+                if (gain > bestGain || (gain == bestGain && gain > 0 && depthSum > bestDepth))
+                {
+                    best = d; bestGain = gain; bestDepth = depthSum;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Mıknatıs: rampadaki kamyonun eksik kolilerini (önce en derindekiler) çekip yükler.
+        /// Her çekiş ayrı bir hamle sonucudur; kamyon dolarsa normal kalkış/varış olur.
+        /// </summary>
+        public List<MoveResult> MagnetPull(int dock)
+        {
+            var results = new List<MoveResult>();
+            if (Lost || dock < 0 || dock >= Docks.Length || Docks[dock] == null) return results;
+            Truck truck = Docks[dock];
+            int color = truck.Color;
+            while (Docks[dock] == truck && !truck.IsFull)
+            {
+                MoveResult r = null;
+                int bestColumn = -1, bestDepth = -1;
+                for (int c = 0; c < Columns.Count; c++)
+                {
+                    List<int> col = Columns[c];
+                    for (int i = 0; i < col.Count; i++)
+                    {
+                        int depth = col.Count - 1 - i;
+                        if (col[i] == color && depth > bestDepth) { bestColumn = c; bestDepth = depth; }
+                    }
+                }
+                if (bestColumn >= 0)
+                {
+                    List<int> col = Columns[bestColumn];
+                    col.RemoveAt(col.Count - 1 - bestDepth);
+                    r = new MoveResult { Color = color, FromColumn = bestColumn, FromDepth = bestDepth };
+                    if (Refill != null)
+                    {
+                        r.RefillColor = Refill(bestColumn);
+                        col.Insert(0, r.RefillColor);
+                    }
+                }
+                else
+                {
+                    int slot = System.Array.IndexOf(Buffer, color);
+                    if (slot < 0) break;
+                    Buffer[slot] = -1;
+                    r = new MoveResult { Color = color, FromBuffer = slot };
+                }
+                LoadInto(dock, r);
+                results.Add(r);
+            }
+            return results;
+        }
+
+        /// <summary>Depodaki kolileri karıştırır; sütun yükseklikleri aynı kalır.</summary>
+        public void ShuffleColumns(System.Random rng)
+        {
+            var all = new List<int>();
+            foreach (List<int> col in Columns) all.AddRange(col);
+            for (int i = all.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (all[i], all[j]) = (all[j], all[i]);
+            }
+            int k = 0;
+            foreach (List<int> col in Columns)
+                for (int i = 0; i < col.Count; i++) col[i] = all[k++];
+        }
+
+        /// <summary>Öndeki kolilerden kaçı doğrudan bir kamyona gidebilir.</summary>
+        public int DirectFrontCount()
+        {
+            int n = 0;
+            for (int c = 0; c < Columns.Count; c++)
+            {
+                int f = FrontCrate(c);
+                if (f >= 0 && FindDockFor(f) >= 0) n++;
+            }
+            return n;
         }
 
         /// <summary>"+3 slot" ile oyuna devam.</summary>
