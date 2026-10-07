@@ -49,6 +49,8 @@ docs/
 
 Tüm görseller kodla üretilir (`VisualFactory`): kolilerde renk körleri için sembol, kamyonlarda tekerlek ve kabin, depo zemini.
 
+**Uygulama ikonu ve açılış ekranı:** `Assets/Art/AppIcon/`; Unity'de **Honk & Load → Uygulama İkonu ve Açılış Ekranı** menüsüyle uygulanır. Mağaza görselleri `Store/` klasöründe (bkz. `Store/README.md`).
+
 **İsteğe bağlı hazır kamyon modeli:** `Assets/Resources/Models/` klasörüne `Truck` adlı bir model (.fbx veya prefab) koyarsan oyun onu kullanır: yönünü (kabin önde), boyutunu ve kasanın yerini modelden otomatik bulur, kamyonun rengine boyar. Modelin Inspector'ında **Read/Write** açık olmalı (Kenney `truck-flat` için açıldı).
 
 ## Bölüm dosyası formatı
