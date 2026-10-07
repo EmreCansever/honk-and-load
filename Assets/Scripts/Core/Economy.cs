@@ -13,8 +13,10 @@ namespace HonkAndLoad.Core
         public class BoosterInfo
         {
             public BoosterType Type;
-            public string Name;
-            public string Description;
+            public string NameTr;
+            public string DescriptionTr;
+            public string Name => Loc.T(NameTr);
+            public string Description => Loc.T(DescriptionTr);
             public int Price;        // 1 adet, altın
             public int UnlockLevel;  // Macera'da bu bölüme gelince açılır
             public bool AdventureOnly;
@@ -31,14 +33,14 @@ namespace HonkAndLoad.Core
 
         public static readonly BoosterInfo[] Boosters =
         {
-            new BoosterInfo { Type = BoosterType.Undo, Name = "Geri Al", Price = 60, UnlockLevel = 3, AdventureOnly = true,
-                Description = "Son hamleni geri alır." },
-            new BoosterInfo { Type = BoosterType.Magnet, Name = "Mıknatıs", Price = 100, UnlockLevel = 6,
-                Description = "Bir kamyonun eksik kolilerini depodan çekip yükler." },
-            new BoosterInfo { Type = BoosterType.Shuffle, Name = "Karıştır", Price = 80, UnlockLevel = 9,
-                Description = "Depodaki kolileri yeniden dizer." },
-            new BoosterInfo { Type = BoosterType.ExtraSlot, Name = "+1 Raf", Price = 120, UnlockLevel = 12,
-                Description = "Rafa bu oyun için bir yer ekler." },
+            new BoosterInfo { Type = BoosterType.Undo, NameTr = "Geri Al", Price = 60, UnlockLevel = 3, AdventureOnly = true,
+                DescriptionTr = "Son hamleni geri alır." },
+            new BoosterInfo { Type = BoosterType.Magnet, NameTr = "Mıknatıs", Price = 100, UnlockLevel = 6,
+                DescriptionTr = "Bir kamyonun eksik kolilerini depodan çekip yükler." },
+            new BoosterInfo { Type = BoosterType.Shuffle, NameTr = "Karıştır", Price = 80, UnlockLevel = 9,
+                DescriptionTr = "Depodaki kolileri yeniden dizer." },
+            new BoosterInfo { Type = BoosterType.ExtraSlot, NameTr = "+1 Raf", Price = 120, UnlockLevel = 12,
+                DescriptionTr = "Rafa bu oyun için bir yer ekler." },
         };
 
         public static BoosterInfo Info(BoosterType t) => Boosters[(int)t];

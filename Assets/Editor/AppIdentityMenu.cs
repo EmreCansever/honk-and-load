@@ -14,7 +14,7 @@ namespace HonkAndLoad.EditorTools
         private const string Dir = "Assets/Art/AppIcon/";
         private static readonly Color SplashBackground = new Color32(0xFF, 0xA8, 0x3A, 0xFF);
 
-        [MenuItem("Honk & Load/Uygulama İkonu ve Açılış Ekranı")]
+        [MenuItem("Honk & Load/Uygulama Ayarları (ikon, açılış, ad, yön)")]
         public static void Apply()
         {
             Texture2D master = Load("icon_master_1024.png", false);
@@ -59,6 +59,16 @@ namespace HonkAndLoad.EditorTools
             PlayerSettings.SplashScreen.drawMode = PlayerSettings.SplashScreen.DrawMode.AllSequential;
             PlayerSettings.SplashScreen.animationMode = PlayerSettings.SplashScreen.AnimationMode.Dolly;
             PlayerSettings.SplashScreen.logos = new[] { PlayerSettings.SplashScreenLogo.Create(1.6f, logo) };
+
+            // Uygulama adı, sürüm, yalnızca dikey ekran
+            PlayerSettings.productName = "Honk & Load!";
+            if (string.IsNullOrEmpty(PlayerSettings.bundleVersion) || PlayerSettings.bundleVersion == "0.1"
+                || PlayerSettings.bundleVersion == "1.0")
+                PlayerSettings.bundleVersion = "0.2.0";
+            PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
+            PlayerSettings.allowedAutorotateToLandscapeLeft = false;
+            PlayerSettings.allowedAutorotateToLandscapeRight = false;
+            PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
 
             AssetDatabase.SaveAssets();
             Debug.Log($"[Honk & Load] İkon ve açılış ekranı uygulandı (Android ikon türü: {androidKinds}).");

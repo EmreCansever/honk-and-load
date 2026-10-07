@@ -266,6 +266,16 @@ namespace HonkAndLoad.UI
             return body || shackle;
         });
 
+        /// <summary>Ayarlar: dişli çark.</summary>
+        public Texture2D Gear() => Icon(128, (u, v) =>
+        {
+            float r = Mathf.Sqrt(u * u + v * v);
+            float ang = Mathf.Atan2(v, u) * Mathf.Rad2Deg + 360f;
+            float m = ang % 45f;
+            bool tooth = r < 0.92f && (m < 12f || m > 33f);
+            return r > 0.3f && (r < 0.68f || tooth);
+        });
+
         /// <summary>Reklam: oynat düğmeli ekran.</summary>
         public Texture2D AdIcon() => Icon(96, (u, v) =>
         {

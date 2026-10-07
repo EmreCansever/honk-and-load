@@ -40,6 +40,14 @@ Renkli kolileri doğru kamyona yükleyip sıkışan depoyu boşalttığın, tek 
 - **Market** (gerçek para, `Store.cs`): Başlangıç Paketi (reklamsız + 1.000 altın + her güçlendiriciden 3), Reklamsız, 1.000 / 3.000 / 7.500 altın. Ürün kimlikleri Play Console'da aynen tanımlanmalı: `starter_pack`, `no_ads`, `coins_1000`, `coins_3000`, `coins_7500`. Fiyatlar şimdilik yer tutucu.
 - **Henüz bağlı değil:** Google Play ödeme (Unity IAP) ve AdMob. O zamana kadar Editor ve geliştirme sürümünde satın alımlar ücretsiz simüle edilir, ödüllü reklam yerine kısa bir "test reklamı" gösterilir (`AdService.cs`). Yayın sürümünde satın alma "Mağaza henüz hazır değil" der.
 
+## Dil, ayarlar, gizlilik
+
+- **Dil:** Türkçe ve İngilizce. Varsayılan "Otomatik": telefon Türkçe ise Türkçe, değilse İngilizce. Ayarlar'dan değiştirilebilir. Kodda metinler Türkçe yazılıp `Loc.T("...")` / `Loc.F("... {0}", x)` ile sarılır; İngilizce karşılıkları `Core/Loc.cs` sözlüğünde. Çevirisi eksik metin Editor'da uyarı verir.
+- **Ayarlar ekranı:** ses, titreşim, dil, gizlilik politikası, satın alımları geri yükle, ilerlemeyi sıfırla (altın ve satın alımlar korunur), sürüm.
+- **Android davranışları:** ekran kararmaz, tek dokunuş, geri tuşu önce açık pencereyi kapatır, menüde iki kez basınca çıkar; uygulama arka plana alınınca rekor ve altın kaydedilir. Yalnızca dikey ekran.
+- **Gizlilik politikası:** `docs/privacy.html` (Türkçe + İngilizce). GitHub'da **Settings → Pages → Deploy from a branch → main / docs** seçilince `https://emrecansever.github.io/honk-and-load/privacy.html` adresinde yayınlanır; bu link oyunda ve Play Console'da kullanılır. Yayından önce sayfadaki `[iletişim e-postası]` yerine bir e-posta yazılmalı.
+- **Unity'de:** **Honk & Load → Uygulama Ayarları** menüsü ikon, açılış ekranı, uygulama adı, sürüm (0.2.0) ve dikey ekranı Player Settings'e uygular.
+
 ## Projeyi açma
 
 1. Unity Hub → **Add → Add project from disk** → bu klasörü seç.
@@ -65,7 +73,7 @@ docs/
 
 Tüm görseller kodla üretilir (`VisualFactory`): kolilerde renk körleri için sembol, kamyonlarda tekerlek ve kabin, depo zemini.
 
-**Uygulama ikonu ve açılış ekranı:** `Assets/Art/AppIcon/`; Unity'de **Honk & Load → Uygulama İkonu ve Açılış Ekranı** menüsüyle uygulanır. Mağaza görselleri `Store/` klasöründe (bkz. `Store/README.md`).
+**Uygulama ikonu ve açılış ekranı:** `Assets/Art/AppIcon/`; Unity'de **Honk & Load → Uygulama Ayarları** menüsüyle uygulanır. Mağaza görselleri `Store/` klasöründe (bkz. `Store/README.md`).
 
 **İsteğe bağlı hazır kamyon modeli:** `Assets/Resources/Models/` klasörüne `Truck` adlı bir model (.fbx veya prefab) koyarsan oyun onu kullanır: yönünü (kabin önde), boyutunu ve kasanın yerini modelden otomatik bulur, kamyonun rengine boyar. Modelin Inspector'ında **Read/Write** açık olmalı (Kenney `truck-flat` için açıldı).
 

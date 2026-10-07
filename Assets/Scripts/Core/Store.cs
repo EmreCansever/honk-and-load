@@ -17,25 +17,28 @@ namespace HonkAndLoad.Core
         public class Product
         {
             public string Id;            // Play Console ürün kimliği
-            public string Title;
-            public string Subtitle;
+            public string TitleTr;
+            public string SubtitleTr;
+            public string Title => Loc.T(TitleTr);
+            public string Subtitle => Loc.T(SubtitleTr);
             public string PlaceholderPrice; // gerçek fiyat mağazadan gelecek
             public bool OneTime;         // bir kez alınabilir (reklamsız, başlangıç paketi)
             public int Coins;
             public bool RemovesAds;
             public int BoostersEach;     // her güçlendiriciden adet
-            public string Badge;         // "EN POPÜLER" vb.
+            public string BadgeTr;       // "EN POPÜLER" vb.
+            public string Badge => Loc.T(BadgeTr);
         }
 
         public static readonly List<Product> Products = new List<Product>
         {
-            new Product { Id = "starter_pack", Title = "Başlangıç Paketi", Subtitle = "Reklamsız + 1.000 altın + her güçlendiriciden 3",
-                PlaceholderPrice = "₺149,99", OneTime = true, Coins = 1000, RemovesAds = true, BoostersEach = 3, Badge = "%60 AVANTAJ" },
-            new Product { Id = "no_ads", Title = "Reklamsız", Subtitle = "Bölüm arası reklamlar kalkar",
+            new Product { Id = "starter_pack", TitleTr = "Başlangıç Paketi", SubtitleTr = "Reklamsız + 1.000 altın + her güçlendiriciden 3",
+                PlaceholderPrice = "₺149,99", OneTime = true, Coins = 1000, RemovesAds = true, BoostersEach = 3, BadgeTr = "%60 AVANTAJ" },
+            new Product { Id = "no_ads", TitleTr = "Reklamsız", SubtitleTr = "Bölüm arası reklamlar kalkar",
                 PlaceholderPrice = "₺99,99", OneTime = true, RemovesAds = true },
-            new Product { Id = "coins_1000", Title = "1.000", Subtitle = "altın", PlaceholderPrice = "₺49,99", Coins = 1000 },
-            new Product { Id = "coins_3000", Title = "3.000", Subtitle = "altın", PlaceholderPrice = "₺119,99", Coins = 3000, Badge = "EN POPÜLER" },
-            new Product { Id = "coins_7500", Title = "7.500", Subtitle = "altın", PlaceholderPrice = "₺249,99", Coins = 7500, Badge = "EN İYİ FİYAT" },
+            new Product { Id = "coins_1000", TitleTr = "1.000", SubtitleTr = "altın", PlaceholderPrice = "₺49,99", Coins = 1000 },
+            new Product { Id = "coins_3000", TitleTr = "3.000", SubtitleTr = "altın", PlaceholderPrice = "₺119,99", Coins = 3000, BadgeTr = "EN POPÜLER" },
+            new Product { Id = "coins_7500", TitleTr = "7.500", SubtitleTr = "altın", PlaceholderPrice = "₺249,99", Coins = 7500, BadgeTr = "EN İYİ FİYAT" },
         };
 
         public static Product Find(string id) => Products.Find(p => p.Id == id);
@@ -52,19 +55,19 @@ namespace HonkAndLoad.Core
         /// <summary>Satın alır; sonuç (başarılı mı, mesaj) geri çağrıyla döner.</summary>
         public static void Purchase(Product p, Action<bool, string> done)
         {
-            if (p == null) { done(false, "Ürün bulunamadı"); return; }
-            if (IsOwned(p)) { done(false, "Zaten sahipsin"); return; }
-            if (!IsAvailable) { done(false, "Mağaza henüz hazır değil"); return; }
+            if (p == null) { done(false, Loc.T("Ürün bulunamadı")); return; }
+            if (IsOwned(p)) { done(false, Loc.T("Zaten sahipsin")); return; }
+            if (!IsAvailable) { done(false, Loc.T("Mağaza henüz hazır değil")); return; }
 
             // TODO: Unity IAP → Google Play. Şimdilik test simülasyonu.
             Grant(p);
-            done(true, IsSimulated ? "Test satın alımı (ücret alınmadı)" : "Satın alındı");
+            done(true, Loc.T(IsSimulated ? "Test satın alımı (ücret alınmadı)" : "Satın alındı"));
         }
 
         /// <summary>Satın alımları geri yükle (telefon değişince). IAP bağlanınca doldurulacak.</summary>
         public static void Restore(Action<string> done)
         {
-            done(IsAvailable ? "Geri yüklenecek satın alım yok" : "Mağaza henüz hazır değil");
+            done(Loc.T(IsAvailable ? "Geri yüklenecek satın alım yok" : "Mağaza henüz hazır değil"));
         }
 
         private static void Grant(Product p)

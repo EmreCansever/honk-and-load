@@ -93,6 +93,11 @@ namespace HonkAndLoad.Gameplay
         private void Awake()
         {
             Application.targetFrameRate = 60;
+            // Oyun açıkken ekran kararmasın; tek parmakla oynanır
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;
+#if ENABLE_LEGACY_INPUT_MANAGER
+            Input.multiTouchEnabled = false;
+#endif
             SetupCamera();
             SetupLight();
             _view = new GameObject("BoardView").AddComponent<BoardView>();
@@ -153,6 +158,11 @@ namespace HonkAndLoad.Gameplay
             _hud.OpenShop();
             yield return new WaitForSecondsRealtime(0.5f);
             yield return Shot(prefix + "_1b_market.png");
+            _hud.CloseModals();
+
+            _hud.OpenSettings();
+            yield return new WaitForSecondsRealtime(0.5f);
+            yield return Shot(prefix + "_1c_ayarlar.png");
             _hud.CloseModals();
 
             _forceTutorial = true;
@@ -225,13 +235,38 @@ namespace HonkAndLoad.Gameplay
                 else HandleBufferTap(_hint.Index);
                 yield return new WaitForSecondsRealtime(0.15f);
             }
-            _hud.Banner("Zorluk 2!", "Koliler daha karışık geliyor");
+            _hud.Banner(Loc.F("Zorluk {0}!", 2), Loc.T("Koliler daha karışık geliyor"));
             yield return new WaitForSecondsRealtime(0.5f);
             yield return Shot(prefix + "_7_sonsuz.png");
 
             SetPhase(Phase.Lost);
             yield return new WaitForSecondsRealtime(1.0f);
             yield return Shot(prefix + "_8_sonsuz_bitis.png");
+
+            // İngilizce görünüm
+            Loc.Language savedLanguage = Loc.Setting;
+            Loc.Setting = Loc.Language.English;
+            ShowMenu();
+            yield return new WaitForSecondsRealtime(0.6f);
+            yield return Shot(prefix + "_9_en_menu.png");
+            _hud.OpenShop();
+            yield return new WaitForSecondsRealtime(0.4f);
+            yield return Shot(prefix + "_9b_en_market.png");
+            _hud.CloseModals();
+            _hud.OpenSettings();
+            yield return new WaitForSecondsRealtime(0.4f);
+            yield return Shot(prefix + "_9c_en_ayarlar.png");
+            _hud.CloseModals();
+            _forceTutorial = true;
+            StartLevel(1);
+            yield return new WaitForSecondsRealtime(0.8f);
+            yield return Shot(prefix + "_9d_en_ogretici.png");
+            _forceTutorial = false;
+            SetPhase(Phase.Lost);
+            yield return new WaitForSecondsRealtime(0.8f);
+            yield return Shot(prefix + "_9e_en_kayip.png");
+            Loc.Setting = savedLanguage;
+            ShowMenu();
 
             Debug.Log($"[HonkAndLoad] Ekran taraması bitti: {prefix}_*.png");
             UnityEditor.EditorApplication.isPlaying = false;
@@ -335,11 +370,11 @@ namespace HonkAndLoad.Gameplay
         {
             if (State == null) return;
             int used = State.BufferUsed(), size = State.Buffer.Length;
-            if (used >= size - 1 && _bufferPeakShown < 2) { _hud.Caption("Son 1 yer!", new Color(1f, 0.35f, 0.3f)); _bufferPeakShown = 2; }
-            else if (used >= size - 2 && _bufferPeakShown < 1) { _hud.Caption("Raf doluyor!", Palette.Warning); _bufferPeakShown = 1; }
+            if (used >= size - 1 && _bufferPeakShown < 2) { _hud.Caption(Loc.T("Son 1 yer!"), new Color(1f, 0.35f, 0.3f)); _bufferPeakShown = 2; }
+            else if (used >= size - 2 && _bufferPeakShown < 1) { _hud.Caption(Loc.T("Raf doluyor!"), Palette.Warning); _bufferPeakShown = 1; }
             else if (used <= 1 && _bufferPeakShown >= 1)
             {
-                _hud.Caption("Kurtuldu!", new Color(0.45f, 1f, 0.55f));
+                _hud.Caption(Loc.T("Kurtuldu!"), new Color(0.45f, 1f, 0.55f));
                 _bufferPeakShown = 0;
             }
         }
@@ -439,7 +474,7 @@ namespace HonkAndLoad.Gameplay
                 yield return new WaitForSeconds(0.55f);
             }
 
-            _hud.Caption("RAF DOLDU!", new Color(1f, 0.3f, 0.3f));
+            _hud.Caption(Loc.T("RAF DOLDU!"), new Color(1f, 0.3f, 0.3f));
             yield return new WaitForSeconds(1.4f);
             yield return EndCard(3.6f);
         }
@@ -509,7 +544,7 @@ namespace HonkAndLoad.Gameplay
             RestartLevel();
             if (unlocked != null)
                 foreach (Economy.BoosterInfo b in unlocked)
-                    _hud.Banner($"Yeni: {b.Name}!", $"{Economy.UnlockGift} tane hediye. {b.Description}");
+                    _hud.Banner(Loc.F("Yeni: {0}!", b.Name), Loc.F("{0} tane hediye. {1}", Economy.UnlockGift, b.Description));
         }
 
         public void RestartLevel()
@@ -590,27 +625,27 @@ namespace HonkAndLoad.Gameplay
             reason = null;
             Economy.BoosterInfo info = Economy.Info(type);
             if (State == null || VideoMode) { reason = ""; return false; }
-            if (!Economy.IsUnlocked(type)) { reason = $"Bölüm {info.UnlockLevel}'de açılır"; return false; }
-            if (info.AdventureOnly && Mode == GameMode.Endless) { reason = "Sonsuz modda kullanılamaz"; return false; }
+            if (!Economy.IsUnlocked(type)) { reason = Loc.F("Bölüm {0}'de açılır", info.UnlockLevel); return false; }
+            if (info.AdventureOnly && Mode == GameMode.Endless) { reason = Loc.T("Sonsuz modda kullanılamaz"); return false; }
             bool lostOk = type == BoosterType.Undo && CurrentPhase == Phase.Lost;
             if (CurrentPhase != Phase.Playing && !lostOk) { reason = ""; return false; }
             if (Time.time < _inputLockedUntil) { reason = ""; return false; }
             switch (type)
             {
                 case BoosterType.Undo:
-                    if (_history.Count == 0) { reason = "Geri alınacak hamle yok"; return false; }
+                    if (_history.Count == 0) { reason = Loc.T("Geri alınacak hamle yok"); return false; }
                     break;
                 case BoosterType.Magnet:
-                    if (State.ChooseMagnetDock() < 0) { reason = "Çekilecek koli yok"; return false; }
+                    if (State.ChooseMagnetDock() < 0) { reason = Loc.T("Çekilecek koli yok"); return false; }
                     break;
                 case BoosterType.Shuffle:
                     int crates = 0;
                     foreach (var col in State.Columns) crates += col.Count;
-                    if (crates < 2) { reason = "Karıştırılacak koli yok"; return false; }
+                    if (crates < 2) { reason = Loc.T("Karıştırılacak koli yok"); return false; }
                     break;
                 case BoosterType.ExtraSlot:
                     if (ExtraSlotsBought >= Economy.MaxExtraSlotsPerGame)
-                    { reason = $"Bir oyunda en fazla {Economy.MaxExtraSlotsPerGame} kez"; return false; }
+                    { reason = Loc.F("Bir oyunda en fazla {0} kez", Economy.MaxExtraSlotsPerGame); return false; }
                     break;
             }
             return true;
@@ -644,7 +679,7 @@ namespace HonkAndLoad.Gameplay
             SetPhase(Phase.Playing);
             FitCamera();
             UpdateHint();
-            _hud.Popup("Geri alındı", _view.BufferWorld(0), Color.white, 0f);
+            _hud.Popup(Loc.T("Geri alındı"), _view.BufferWorld(0), Color.white, 0f);
         }
 
         private IEnumerator DoMagnet()
@@ -655,7 +690,7 @@ namespace HonkAndLoad.Gameplay
             var pulls = State.MagnetPull(dock);
             _inputLockedUntil = Time.time + 0.2f * pulls.Count + 0.4f;
             _view.MagnetBurst(dock, color);
-            _hud.Popup("Mıknatıs!", _view.DockWorld(dock), Palette.Warning, 0f);
+            _hud.Popup(Loc.T("Mıknatıs!"), _view.DockWorld(dock), Palette.Warning, 0f);
             for (int i = 0; i < pulls.Count; i++)
             {
                 _view.Apply(pulls[i]);
@@ -762,20 +797,20 @@ namespace HonkAndLoad.Gameplay
             if (e.TruckDone)
             {
                 Vector3 at = _view.DockWorld(e.Dock);
-                if (e.Perfect) _hud.Popup($"MÜKEMMEL! +{e.Points}", at, Palette.Warning, 0.2f);
+                if (e.Perfect) _hud.Popup(Loc.F("MÜKEMMEL! +{0}", e.Points), at, Palette.Warning, 0.2f);
                 else _hud.Popup($"+{e.Points}", at, Color.white, 0.2f);
             }
             if (e.ComboMilestone > 0)
-                _hud.Popup($"x{e.ComboMilestone} Kombo!", _view.DockWorld(e.Dock), Palette.Warning, 0f);
+                _hud.Popup(Loc.F("x{0} Kombo!", e.ComboMilestone), _view.DockWorld(e.Dock), Palette.Warning, 0f);
             if (e.TierUp)
             {
-                _hud.Banner($"Zorluk {e.NewTier + 1}!", e.NewTier % 2 == 0 ? "Yeni bir renk geldi!" : "Koliler daha karışık geliyor");
+                _hud.Banner(Loc.F("Zorluk {0}!", e.NewTier + 1), Loc.T(e.NewTier % 2 == 0 ? "Yeni bir renk geldi!" : "Koliler daha karışık geliyor"));
                 StartCoroutine(Delayed(0.2f, _feedback.TruckDeparts));
             }
             if (!VideoMode && !NewRecord && RecordAtStart > 0 && Endless.Score > RecordAtStart)
             {
                 NewRecord = true;
-                _hud.Banner("Yeni Rekor!", $"{Endless.Score} puan");
+                _hud.Banner(Loc.T("Yeni Rekor!"), Loc.F("{0} puan", Endless.Score));
             }
         }
 
@@ -818,6 +853,10 @@ namespace HonkAndLoad.Gameplay
             {
                 if (_hud.HandleBack()) return;
                 if (CurrentPhase != Phase.Menu) { ShowMenu(); return; }
+                // Ana menüde: iki kez basınca çık
+                if (Time.unscaledTime - _lastBackPress < 2f) Application.Quit();
+                else { _lastBackPress = Time.unscaledTime; _hud.Toast(Loc.T("Çıkmak için tekrar bas")); }
+                return;
             }
 #endif
             if (CurrentPhase != Phase.Playing) return;
@@ -893,7 +932,7 @@ namespace HonkAndLoad.Gameplay
                 int combo = Mode == GameMode.Endless ? 0 : _feedback.Combo;
                 // Yalnızca dönüm noktalarında: 3, 5, 8, 10, 15, 20...
                 if (combo == 3 || combo == 5 || combo == 8 || (combo >= 10 && combo % 5 == 0))
-                    _hud.Popup($"x{combo} Kombo!", _view.DockWorld(move.ToDock), Palette.Warning, 0f);
+                    _hud.Popup(Loc.F("x{0} Kombo!", combo), _view.DockWorld(move.ToDock), Palette.Warning, 0f);
             }
             else _feedback.ToBuffer();
 
@@ -901,7 +940,7 @@ namespace HonkAndLoad.Gameplay
             {
                 StartCoroutine(Delayed(0.3f, _feedback.TruckDeparts));
                 if (Mode == GameMode.Adventure)
-                    _hud.Popup("Teslim!", _view.DockWorld(move.ToDock), Color.white, 0.25f);
+                    _hud.Popup(Loc.T("Teslim!"), _view.DockWorld(move.ToDock), Color.white, 0.25f);
             }
 
             // Raftan kendiliğinden binen koliler: ses, puan, kamyon kalkışı
@@ -913,7 +952,7 @@ namespace HonkAndLoad.Gameplay
                 {
                     StartCoroutine(Delayed(0.3f, _feedback.TruckDeparts));
                     if (Mode == GameMode.Adventure)
-                        _hud.Popup("Teslim!", _view.DockWorld(auto.ToDock), Color.white, 0.25f);
+                        _hud.Popup(Loc.T("Teslim!"), _view.DockWorld(auto.ToDock), Color.white, 0.25f);
                 }
             });
 
@@ -976,7 +1015,7 @@ namespace HonkAndLoad.Gameplay
                 if (State.CanTapBuffer(s))
                 {
                     _hint = new Hint { Valid = true, Kind = Tappable.TapKind.Buffer, Index = s,
-                        Text = "Raftaki koliye dokun: kendi kamyonuna yüklensin!" };
+                        Text = Loc.T("Raftaki koliye dokun: kendi kamyonuna yüklensin!") };
                     return;
                 }
 
@@ -986,7 +1025,7 @@ namespace HonkAndLoad.Gameplay
                 if (color >= 0 && State.FindDockFor(color) >= 0)
                 {
                     _hint = new Hint { Valid = true, Kind = Tappable.TapKind.Column, Index = c,
-                        Text = "Öndeki koliye dokun: aynı renkteki kamyona gider!" };
+                        Text = Loc.T("Öndeki koliye dokun: aynı renkteki kamyona gider!") };
                     return;
                 }
             }
@@ -1007,7 +1046,7 @@ namespace HonkAndLoad.Gameplay
             }
             if (fallback >= 0)
                 _hint = new Hint { Valid = true, Kind = Tappable.TapKind.Column, Index = fallback,
-                    Text = "Uygun kamyon yok: koli rafa gider, kamyonu gelince kendiliğinden biner. Raf dolarsa kaybedersin!" };
+                    Text = Loc.T("Uygun kamyon yok: koli rafa gider, kamyonu gelince kendiliğinden biner. Raf dolarsa kaybedersin!") };
         }
 
         private static IEnumerator Delayed(float seconds, System.Action action)
@@ -1087,6 +1126,16 @@ namespace HonkAndLoad.Gameplay
         }
 
         private float _lastAspect;
+        private float _lastBackPress = -10f;
+
+        /// <summary>Uygulama arka plana alınınca (telefon kilitlendi, başka uygulamaya geçildi).</summary>
+        private void OnApplicationPause(bool paused)
+        {
+            if (!paused || VideoMode) return;
+            // Sonsuz modda rekor ve altın hemen kaydedilsin; uygulama kapatılsa da kaybolmasın
+            SaveEndlessBest();
+            PlayerPrefs.Save();
+        }
 
         private void LateUpdate()
         {

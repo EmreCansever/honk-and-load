@@ -13,6 +13,7 @@ namespace HonkAndLoad.UI
             if (AdService.Instance != null && AdService.Instance.IsShowing) return true;
             if (_buyDialog >= 0) { _buyDialog = -1; return true; }
             if (_shopOpen) { _shopOpen = false; return true; }
+            if (_settingsOpen) { _settingsOpen = false; return true; }
             return false;
         }
 
@@ -20,6 +21,100 @@ namespace HonkAndLoad.UI
         {
             _buyDialog = -1;
             _shopOpen = false;
+            _settingsOpen = false;
+        }
+
+        public void OpenSettings()
+        {
+            _settingsOpen = true;
+            _confirmReset = false;
+        }
+
+        // ---------- Ayarlar ----------
+
+        private void DrawSettings(float w, float h)
+        {
+            Track(new Rect(0, 0, w, h));
+            GUI.DrawTexture(new Rect(0, 0, w, h), _menuBg);
+            Color old = GUI.color;
+            GUI.color = new Color(0.04f, 0.06f, 0.22f, 0.25f);
+            GUI.DrawTexture(new Rect(0, 0, w, h), Texture2D.whiteTexture);
+            GUI.color = old;
+
+            float inset = SafeTopInsetPixels() / _scale;
+            float top = inset + 30f, side = 60f, cw = w - 2 * side;
+            GUI.Label(new Rect(0, top - 4, w, 104), Loc.T("AYARLAR"), _shopTitle);
+            if (GUI.Button(new Rect(w - side - 96, top, 96, 96), GUIContent.none, _pillOff)) _settingsOpen = false;
+            GUI.DrawTexture(new Rect(w - side - 96 + 26, top + 26, 44, 44), _closeTex);
+
+            float y = top + 170f, rowH = 130f, gap = 26f;
+            if (SettingRow(new Rect(side, y, cw, rowH), Loc.T("Ses"), Loc.T(Progress.SoundOn ? "Açık" : "Kapalı"), Progress.SoundOn))
+            {
+                Progress.SoundOn = !Progress.SoundOn;
+                _game.ApplySettings();
+            }
+            y += rowH + gap;
+            if (SettingRow(new Rect(side, y, cw, rowH), Loc.T("Titreşim"), Loc.T(Progress.HapticsOn ? "Açık" : "Kapalı"), Progress.HapticsOn))
+            {
+                Progress.HapticsOn = !Progress.HapticsOn;
+                _game.ApplySettings();
+            }
+            y += rowH + gap;
+            Loc.Language lang = Loc.Setting;
+            string langValue = lang == Loc.Language.Auto
+                ? $"{Loc.SettingName(lang)} ({(Loc.IsEnglish ? "English" : "Türkçe")})"
+                : Loc.SettingName(lang);
+            if (SettingRow(new Rect(side, y, cw, rowH), Loc.T("Dil"), langValue, true))
+                Loc.Setting = (Loc.Language)(((int)lang + 1) % 3);
+            y += rowH + gap * 2;
+
+            if (SettingRow(new Rect(side, y, cw, rowH), Loc.T("Gizlilik politikası"), ">", false))
+                Application.OpenURL(AppInfo.PrivacyPolicyUrl);
+            y += rowH + gap;
+            if (SettingRow(new Rect(side, y, cw, rowH), Loc.T("Satın alımları geri yükle"), ">", false))
+                Store.Restore(Toast);
+            y += rowH + gap * 2;
+
+            string reset = Loc.T(_confirmReset ? "Emin misin? Tekrar dokun" : "İlerlemeyi sıfırla");
+            if (GUI.Button(new Rect(side, y, cw, 110), reset, _confirmReset ? _goldButton : _secondary))
+            {
+                if (_confirmReset)
+                {
+                    Progress.ResetLevels();
+                    _confirmReset = false;
+                    Toast(Loc.T("İlerleme sıfırlandı"));
+                }
+                else _confirmReset = true;
+            }
+            GUI.Label(new Rect(0, y + 115, w, 50), Loc.T("Altın ve satın alımlar korunur"), _small);
+
+            GUI.Label(new Rect(0, h - 90 - Screen.safeArea.y / _scale, w, 50),
+                Loc.F("Sürüm {0}", Application.version) + "  ·  Honk & Load!", _small);
+        }
+
+        /// <summary>Ayar satırı: solda ad, sağda değer hapı. Dokununca true.</summary>
+        private bool SettingRow(Rect r, string label, string value, bool on)
+        {
+            bool clicked = GUI.Button(r, GUIContent.none, _tile);
+            GUI.Label(new Rect(r.x + 44, r.y, r.width * 0.5f, r.height), label, _itemTitle);
+            float vw = Mathf.Max(170f, _pillText.CalcSize(new GUIContent(value)).x + 70f);
+            Rect pill = new Rect(r.xMax - vw - 26, r.y + (r.height - 84) / 2, vw, 84);
+            GUI.Box(pill, GUIContent.none, on ? _pillOn : _pillOff);
+            _pillText.normal.textColor = on ? new Color(0.2f, 0.3f, 0.6f) : Color.white;
+            GUI.Label(pill, value, _pillText);
+            return clicked;
+        }
+
+        private bool IconPill(Rect r, Texture2D icon, string text)
+        {
+            bool clicked = GUI.Button(r, GUIContent.none, _pillOff);
+            float ic = r.height - 44;
+            float tw = _pillText.CalcSize(new GUIContent(text)).x;
+            float x = r.x + (r.width - ic - 16 - tw) / 2;
+            GUI.DrawTexture(new Rect(x, r.y + 22, ic, ic), icon);
+            _pillText.normal.textColor = Color.white;
+            GUI.Label(new Rect(x + ic + 16, r.y, tw + 10, r.height), text, _pillText);
+            return clicked;
         }
 
         /// <summary>Ekran taraması için: satın alma penceresini aç.</summary>
@@ -49,7 +144,7 @@ namespace HonkAndLoad.UI
             GUI.DrawTexture(new Rect(r.x + 26, r.y + 15, ic, ic), _bagTex);
             GUI.color = old;
             _pillText.normal.textColor = new Color(0.2f, 0.3f, 0.6f);
-            GUI.Label(new Rect(r.x + ic + 30, r.y, r.width - ic - 50, r.height), "Market", _pillText);
+            GUI.Label(new Rect(r.x + ic + 30, r.y, r.width - ic - 50, r.height), Loc.T("Market"), _pillText);
             return clicked;
         }
 
@@ -133,13 +228,13 @@ namespace HonkAndLoad.UI
                 {
                     GUI.color = new Color(1f, 1f, 1f, 0.8f);
                     GUI.DrawTexture(new Rect(r.x + (r.width - 60) / 2, r.y + 26, 60, 60), _lockTex);
-                    GUI.Label(new Rect(r.x, r.y + r.height - 62, r.width, 50), $"Bölüm {info.UnlockLevel}", _cardDesc);
+                    GUI.Label(new Rect(r.x, r.y + r.height - 62, r.width, 50), Loc.F("Bölüm {0}", info.UnlockLevel), _cardDesc);
                 }
                 GUI.color = old;
 
                 if (clicked)
                 {
-                    if (!unlocked) Toast($"{info.Name}: Bölüm {info.UnlockLevel}'de açılır");
+                    if (!unlocked) Toast(Loc.F("{0}: Bölüm {1}'de açılır", info.Name, info.UnlockLevel));
                     else TapBooster(info.Type);
                 }
             }
@@ -188,7 +283,7 @@ namespace HonkAndLoad.UI
             Rect buy = new Rect(panel.x + 90, panel.y + 570, panel.width - 180, 120);
             if (enough)
             {
-                if (IconButton(buy, _coinTex, $"{info.Price} ile al ve kullan", _goldButton))
+                if (IconButton(buy, _coinTex, Loc.F("{0} ile al ve kullan", info.Price), _goldButton))
                 {
                     if (Economy.TryBuyBooster(info.Type))
                     {
@@ -197,12 +292,12 @@ namespace HonkAndLoad.UI
                     }
                 }
             }
-            else if (IconButton(buy, _bagTex, $"Altın yetmiyor · Market", _goldButton))
+            else if (IconButton(buy, _bagTex, Loc.T("Altın yetmiyor · Market"), _goldButton))
             {
                 _buyDialog = -1;
                 OpenShop();
             }
-            if (GUI.Button(new Rect(panel.x + 200, panel.y + 715, panel.width - 400, 90), "Vazgeç", _secondary))
+            if (GUI.Button(new Rect(panel.x + 200, panel.y + 715, panel.width - 400, 90), Loc.T("Vazgeç"), _secondary))
                 _buyDialog = -1;
         }
 
@@ -220,7 +315,7 @@ namespace HonkAndLoad.UI
             float inset = SafeTopInsetPixels() / _scale;
             float top = inset + 30f, side = 50f, cw = w - 2 * side;
             CoinPill(new Rect(side, top, 300, 96));
-            GUI.Label(new Rect(0, top - 4, w, 104), "MARKET", _shopTitle);
+            GUI.Label(new Rect(0, top - 4, w, 104), Loc.T("MARKET"), _shopTitle);
             if (GUI.Button(new Rect(w - side - 96, top, 96, 96), GUIContent.none, _pillOff)) _shopOpen = false;
             GUI.DrawTexture(new Rect(w - side - 96 + 26, top + 26, 44, 44), _closeTex);
 
@@ -263,23 +358,23 @@ namespace HonkAndLoad.UI
                 int left = Economy.FreeCoinAdsLeft;
                 GUI.Box(r, GUIContent.none, _modeAdventure);
                 GUI.DrawTexture(new Rect(r.x + 36, r.y + (r.height - 10 - 90) / 2, 90, 90), _coinTex);
-                GUI.Label(new Rect(r.x + 150, r.y + 18 * k, r.width - 500, 70), $"Ücretsiz {Economy.FreeCoinsPerAd} altın", _itemTitle);
-                GUI.Label(new Rect(r.x + 152, r.y + 86 * k, r.width - 500, 50), $"Bugün kalan: {left}/{Economy.FreeCoinAdsPerDay}", _itemSub);
+                GUI.Label(new Rect(r.x + 150, r.y + 18 * k, r.width - 500, 70), Loc.F("Ücretsiz {0} altın", Economy.FreeCoinsPerAd), _itemTitle);
+                GUI.Label(new Rect(r.x + 152, r.y + 86 * k, r.width - 500, 50), Loc.F("Bugün kalan: {0}/{1}", left, Economy.FreeCoinAdsPerDay), _itemSub);
                 Rect btn = new Rect(r.xMax - 290, r.y + (r.height - 10 - 96) / 2, 250, 96);
                 GUI.enabled = left > 0;
-                if (PriceButton(btn, left > 0 ? "İzle" : "Yarın", _adTex))
+                if (PriceButton(btn, Loc.T(left > 0 ? "İzle" : "Yarın"), _adTex))
                     AdService.Instance.ShowRewarded(ok =>
                     {
                         if (!ok) return;
                         Economy.UseFreeCoinAd();
-                        Toast($"+{Economy.FreeCoinsPerAd} altın!");
+                        Toast(Loc.F("+{0} altın!", Economy.FreeCoinsPerAd));
                     });
                 GUI.enabled = true;
                 y += r.height + gap;
             }
 
             // Güçlendiriciler (altınla)
-            GUI.Label(new Rect(side + 10, y, cw, 56), "Güçlendiriciler", _sectionLabel);
+            GUI.Label(new Rect(side + 10, y, cw, 56), Loc.T("Güçlendiriciler"), _sectionLabel);
             y += 60;
             float bw = (cw - 3 * 20f) / 4f, bh = 250 * k;
             for (int b = 0; b < Economy.Boosters.Length; b++)
@@ -287,8 +382,8 @@ namespace HonkAndLoad.UI
             y += bh + gap;
 
             // Alt bilgi
-            string note = Store.IsSimulated ? "Test modu: satın alımlar ücretsiz simüle edilir" : "";
-            if (GUI.Button(new Rect(w / 2 - 300, y, 600, 56), "Satın alımları geri yükle", _link))
+            string note = Store.IsSimulated ? Loc.T("Test modu: satın alımlar ücretsiz simüle edilir") : "";
+            if (GUI.Button(new Rect(w / 2 - 300, y, 600, 56), Loc.T("Satın alımları geri yükle"), _link))
                 Store.Restore(Toast);
             if (note.Length > 0) GUI.Label(new Rect(0, y + 52, w, 44), note, _small);
         }
@@ -369,7 +464,7 @@ namespace HonkAndLoad.UI
             GUI.color = old;
             GUI.Label(new Rect(r.x, r.y + 92, r.width, 44), info.Name, _boosterName);
             var have = new GUIStyle(_boosterName) { fontSize = 26, fontStyle = FontStyle.Normal };
-            GUI.Label(new Rect(r.x, r.y + 128, r.width, 36), $"Sende: {Economy.Count(info.Type)}", have);
+            GUI.Label(new Rect(r.x, r.y + 128, r.width, 36), Loc.F("Sende: {0}", Economy.Count(info.Type)), have);
 
             Rect btn = new Rect(r.x + 12, r.yMax - 76, r.width - 24, 64);
             bool clicked = GUI.Button(btn, GUIContent.none, _priceBadge);
@@ -380,7 +475,7 @@ namespace HonkAndLoad.UI
             if (clicked)
             {
                 if (Economy.TryBuyBooster(info.Type)) Toast($"+1 {info.Name}");
-                else Toast("Altının yetmiyor");
+                else Toast(Loc.T("Altının yetmiyor"));
             }
         }
 
@@ -388,7 +483,7 @@ namespace HonkAndLoad.UI
         {
             Store.Purchase(p, (ok, message) =>
             {
-                if (ok) Toast(p.Coins > 0 ? $"+{p.Coins:N0} altın! ({message})" : $"{p.Title} alındı! ({message})");
+                if (ok) Toast(p.Coins > 0 ? Loc.F("+{0} altın! ({1})", p.Coins.ToString("N0"), message) : Loc.F("{0} alındı! ({1})", p.Title, message));
                 else Toast(message);
             });
         }
@@ -417,8 +512,8 @@ namespace HonkAndLoad.UI
                 GUI.DrawTexture(new Rect(0, 0, w, h), Texture2D.whiteTexture);
                 GUI.color = Color.white;
                 GUI.DrawTexture(new Rect(w / 2 - 90, h * 0.4f - 180, 180, 180), _adTex);
-                GUI.Label(new Rect(0, h * 0.4f + 20, w, 90), "Test reklamı", _title);
-                GUI.Label(new Rect(0, h * 0.4f + 110, w, 60), "Gerçek reklamlar AdMob bağlanınca gelecek", _cardDesc);
+                GUI.Label(new Rect(0, h * 0.4f + 20, w, 90), Loc.T("Test reklamı"), _title);
+                GUI.Label(new Rect(0, h * 0.4f + 110, w, 60), Loc.T("Gerçek reklamlar AdMob bağlanınca gelecek"), _cardDesc);
                 Rect bar = new Rect(140, h * 0.4f + 210, w - 280, 26);
                 GUI.DrawTexture(bar, _barBack);
                 GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * AdService.Instance.ShowProgress, bar.height), _barFill);
