@@ -24,6 +24,17 @@ Renkli kolileri doğru kamyona yükleyip sıkışan depoyu boşalttığın, tek 
   - Zorluk kademeleri: 300, 800, 1500, 2400, 3500, 4800, 6300, 8000 puan, sonra her 2000 puanda bir. Her kademede koliler daha karışık gelir, her iki kademede bir yeni renk eklenir (5 → 8 renk).
   - Adalet: her kamyon için tam 3 koli üretilir; koliler kamyonların geliş sırasına göre gelir (`EndlessDirector`).
 
+## Yeni mekanikler
+
+- **Gizli koliler (15. bölümden itibaren):** Arkadaki bazı koliler gri ve soru işaretli; rengi, koli sütunun önüne gelince ortaya çıkar. Oran 15. bölümde %25, sonra %15'ten başlayıp her bölüm %1 artar (en fazla %45). Sonsuz modda "Zorluk 4"ten itibaren gelir. Karıştır güçlendiricisi tüm gizli kolileri açar.
+- **Kilitli sütunlar (25. bölümden itibaren):** Üstünde sayı olan sütuna, o sayı kadar kamyon yola çıkana kadar dokunulamaz. 25. bölümde 1, 40'ta 2, 60'ta 3 kilitli sütun; kilit 1–2 (50. bölümden sonra 1–3) kamyon. En az iki sütun hep açık. Mıknatıs kilitli sütundan da çekebilir.
+- Her mekanik ilk görüldüğü bölümde kısa bir açıklamayla tanıtılır. Üretilen her bölüm çözücüden geçer (kilitler dahil).
+- Bölüm dosyasında: `columns[].hidden` (gizli kolilerin sıra numaraları), `locks` (sütun başına açılış için gereken kamyon sayısı).
+
+## Günlük ödül
+
+7 günlük seri: 50, 75, 100 + Geri Al, 125, 150 + Mıknatıs, 200, 300 + Karıştır altın. Bir gün atlanırsa seri baştan başlar. Reklam izlenirse altın 2 katı. Günün ilk menü açılışında pencere kendiliğinden açılır; menüdeki hediye düğmesinden de açılır.
+
 ## Ekonomi ve market
 
 - **Altın:** Başlangıçta 100. Bölüm geçince 20 (her 5. zor bölümde 40), sonsuz modda her 40 puana 1. Panellerdeki "Reklam izle" ödülü 3 katına çıkarır. Markette günde 5 kez reklamla 30 altın.

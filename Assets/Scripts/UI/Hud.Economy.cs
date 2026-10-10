@@ -14,6 +14,7 @@ namespace HonkAndLoad.UI
             if (_buyDialog >= 0) { _buyDialog = -1; return true; }
             if (_shopOpen) { _shopOpen = false; return true; }
             if (_settingsOpen) { _settingsOpen = false; return true; }
+            if (_dailyOpen) { _dailyOpen = false; return true; }
             return false;
         }
 
@@ -22,7 +23,11 @@ namespace HonkAndLoad.UI
             _buyDialog = -1;
             _shopOpen = false;
             _settingsOpen = false;
+            _dailyOpen = false;
         }
+
+        /// <summary>Ekran taraması için: günlük ödül penceresini aç.</summary>
+        public void OpenDaily() => _dailyOpen = true;
 
         public void OpenSettings()
         {

@@ -29,6 +29,7 @@ namespace HonkAndLoad.Gameplay
         public bool TruckDeparted;    // kamyon doldu ve gitti mi
         public Truck ArrivedTruck;    // yerine gelen kamyon (yoksa null)
         public int RefillColor = -1;  // sonsuz mod: sütunun arkasına gelen yeni koli
+        public bool RefillHidden;     // sonsuz mod: yeni koli gizli mi
 
         /// <summary>
         /// Bu hamle bir kamyonu doldurup yenisini getirdiyse, raftan yeni kamyona kendiliğinden
@@ -44,6 +45,15 @@ namespace HonkAndLoad.Gameplay
     public class BoardState
     {
         public readonly List<List<int>> Columns = new List<List<int>>();
+
+        /// <summary>Columns ile paralel: koli gizli mi (soru işaretli). En öndeki koli her zaman açıktır.</summary>
+        public readonly List<List<bool>> Hidden = new List<List<bool>>();
+
+        /// <summary>Kilitli sütunlar: sütunun açılması için gitmesi gereken toplam kamyon sayısı (null = kilit yok).</summary>
+        public int[] LockAt;
+
+        /// <summary>Sonsuz mod: arkadan gelen yeni koli gizli mi olsun.</summary>
+        public System.Func<bool> RefillHidden;
         public Truck[] Docks;
         public readonly Queue<int> TruckQueue = new Queue<int>();
         public int[] Buffer;
@@ -68,7 +78,21 @@ namespace HonkAndLoad.Gameplay
         {
             TruckCapacity = data.truckCapacity;
             TotalTrucks = data.trucks.Count;
-            foreach (ColumnData c in data.columns) Columns.Add(new List<int>(c.crates));
+            foreach (ColumnData c in data.columns)
+            {
+                Columns.Add(new List<int>(c.crates));
+                var hidden = new List<bool>(new bool[c.crates.Count]);
+                if (c.hidden != null)
+                    foreach (int i in c.hidden)
+                        if (i >= 0 && i < hidden.Count) hidden[i] = true;
+                if (hidden.Count > 0) hidden[hidden.Count - 1] = false; // en öndeki görünür
+                Hidden.Add(hidden);
+            }
+            if (data.locks != null && data.locks.Exists(l => l > 0))
+            {
+                LockAt = new int[Columns.Count];
+                for (int i = 0; i < LockAt.Length && i < data.locks.Count; i++) LockAt[i] = data.locks[i];
+            }
             foreach (int t in data.trucks) TruckQueue.Enqueue(t);
 
             Docks = new Truck[data.dockCount];
@@ -93,6 +117,38 @@ namespace HonkAndLoad.Gameplay
             return col.Count > 0 ? col[col.Count - 1] : -1;
         }
 
+        public bool IsLocked(int column) => LockAt != null && DepartedTrucks < LockAt[column];
+
+        /// <summary>Kilidin açılmasına kalan kamyon sayısı (0 = açık).</summary>
+        public int LockRemaining(int column) =>
+            LockAt == null ? 0 : System.Math.Max(0, LockAt[column] - DepartedTrucks);
+
+        public bool HasLocks
+        {
+            get
+            {
+                if (LockAt == null) return false;
+                for (int i = 0; i < LockAt.Length; i++) if (IsLocked(i)) return true;
+                return false;
+            }
+        }
+
+        /// <summary>Sütundan bir koli çıkınca: gizli bayrağını da çıkar, yeni öndekini aç.</summary>
+        private void RemoveFromColumn(int column, int index, MoveResult result)
+        {
+            List<int> col = Columns[column];
+            col.RemoveAt(index);
+            Hidden[column].RemoveAt(index);
+            if (Refill != null)
+            {
+                result.RefillColor = Refill(column);
+                result.RefillHidden = RefillHidden != null && RefillHidden();
+                col.Insert(0, result.RefillColor); // arkaya (listenin başı) eklenir
+                Hidden[column].Insert(0, result.RefillHidden);
+            }
+            if (col.Count > 0) Hidden[column][col.Count - 1] = false;
+        }
+
         public int FindDockFor(int color)
         {
             for (int i = 0; i < Docks.Length; i++)
@@ -115,7 +171,7 @@ namespace HonkAndLoad.Gameplay
 
         public bool CanTapColumn(int column)
         {
-            if (Lost) return false;
+            if (Lost || IsLocked(column)) return false;
             int color = FrontCrate(column);
             if (color < 0) return false;
             return FindDockFor(color) >= 0 || FreeBufferSlot() >= 0;
@@ -154,14 +210,8 @@ namespace HonkAndLoad.Gameplay
             if (column < 0 || column >= Columns.Count || !CanTapColumn(column)) return null;
             List<int> col = Columns[column];
             int color = col[col.Count - 1];
-            col.RemoveAt(col.Count - 1);
-
             var result = new MoveResult { Color = color, FromColumn = column };
-            if (Refill != null)
-            {
-                result.RefillColor = Refill(column);
-                col.Insert(0, result.RefillColor); // arkaya (listenin başı) eklenir
-            }
+            RemoveFromColumn(column, col.Count - 1, result);
             int dock = FindDockFor(color);
             if (dock >= 0) LoadInto(dock, result);
             else
@@ -280,13 +330,8 @@ namespace HonkAndLoad.Gameplay
                 if (bestColumn >= 0)
                 {
                     List<int> col = Columns[bestColumn];
-                    col.RemoveAt(col.Count - 1 - bestDepth);
                     r = new MoveResult { Color = color, FromColumn = bestColumn, FromDepth = bestDepth };
-                    if (Refill != null)
-                    {
-                        r.RefillColor = Refill(bestColumn);
-                        col.Insert(0, r.RefillColor);
-                    }
+                    RemoveFromColumn(bestColumn, col.Count - 1 - bestDepth, r);
                 }
                 else
                 {
@@ -314,6 +359,9 @@ namespace HonkAndLoad.Gameplay
             int k = 0;
             foreach (List<int> col in Columns)
                 for (int i = 0; i < col.Count; i++) col[i] = all[k++];
+            // Karıştırma tüm gizli kolileri açar
+            foreach (List<bool> h in Hidden)
+                for (int i = 0; i < h.Count; i++) h[i] = false;
         }
 
         /// <summary>Öndeki kolilerden kaçı doğrudan bir kamyona gidebilir.</summary>
@@ -323,7 +371,7 @@ namespace HonkAndLoad.Gameplay
             for (int c = 0; c < Columns.Count; c++)
             {
                 int f = FrontCrate(c);
-                if (f >= 0 && FindDockFor(f) >= 0) n++;
+                if (f >= 0 && !IsLocked(c) && FindDockFor(f) >= 0) n++;
             }
             return n;
         }
@@ -350,9 +398,11 @@ namespace HonkAndLoad.Gameplay
                 DepartedTrucks = DepartedTrucks,
                 Lost = Lost,
                 Docks = new Truck[Docks.Length],
-                Buffer = (int[])Buffer.Clone()
+                Buffer = (int[])Buffer.Clone(),
+                LockAt = LockAt
             };
             foreach (List<int> c in Columns) b.Columns.Add(new List<int>(c));
+            foreach (List<bool> h in Hidden) b.Hidden.Add(new List<bool>(h));
             foreach (int t in TruckQueue) b.TruckQueue.Enqueue(t);
             for (int i = 0; i < Docks.Length; i++) b.Docks[i] = Docks[i]?.Clone();
             return b;

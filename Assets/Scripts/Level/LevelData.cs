@@ -16,6 +16,12 @@ namespace HonkAndLoad.Level
         public List<int> trucks = new List<int>();
         public List<ColumnData> columns = new List<ColumnData>();
 
+        /// <summary>
+        /// Kilitli sütunlar: locks[i] = sütun i'nin açılması için gitmesi gereken kamyon sayısı
+        /// (0 ya da eksik = kilitsiz).
+        /// </summary>
+        public List<int> locks = new List<int>();
+
         public int ColorCount()
         {
             int max = -1;
@@ -68,5 +74,8 @@ namespace HonkAndLoad.Level
     public class ColumnData
     {
         public List<int> crates = new List<int>();
+
+        /// <summary>Gizli (soru işaretli) kolilerin crates içindeki sıra numaraları.</summary>
+        public List<int> hidden = new List<int>();
     }
 }

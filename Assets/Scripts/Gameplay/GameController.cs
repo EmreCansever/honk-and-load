@@ -51,6 +51,14 @@ namespace HonkAndLoad.Gameplay
         /// <summary>Son aşama değişikliğinden bu yana geçen süre (kazanma paneli gecikmesi için).</summary>
         public float PhaseTime { get; private set; }
 
+        /// <summary>Ekran taraması sürüyor (günlük ödül penceresi kendiliğinden açılmasın).</summary>
+        public bool Sweeping { get; private set; }
+
+        public Vector3 LockBadgeWorld(int column) => _view.LockBadgeWorld(column);
+
+        /// <summary>Yeni mekanik tanıtımı (ilk hamleye kadar gösterilir).</summary>
+        public string IntroText { get; private set; }
+
         // İpucu / öğretici
         public bool IsTutorial => LevelNumber == 1 && (!Progress.TutorialDone || _forceTutorial);
         private bool _forceTutorial;
@@ -150,6 +158,21 @@ namespace HonkAndLoad.Gameplay
             string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Recordings", "sweep"));
             Directory.CreateDirectory(folder);
             string prefix = Path.Combine(folder, $"{device}_{Screen.width}x{Screen.height}");
+            Sweeping = true;
+
+            // Yeni mekanikli bölümler çözülebilir mi?
+            foreach (int n in new[] { 15, 20, 25, 26, 30, 40, 50, 60 })
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                LevelData d = LevelLoader.Load(n);
+                long genMs = watch.ElapsedMilliseconds;
+                LevelSolver.Result res = LevelSolver.Solve(d);
+                int hidden = 0;
+                foreach (ColumnData col in d.columns) hidden += col.hidden.Count;
+                Debug.Log($"[Test] bölüm {n}: çözülebilir={res.Solvable} (düğüm {res.NodesExplored}), gizli {hidden}, " +
+                          $"kilit [{string.Join(",", d.locks)}], üretim {genMs} ms");
+                yield return null;
+            }
 
             ShowMenu();
             yield return new WaitForSecondsRealtime(1.0f);
@@ -164,6 +187,31 @@ namespace HonkAndLoad.Gameplay
             yield return new WaitForSecondsRealtime(0.5f);
             yield return Shot(prefix + "_1c_ayarlar.png");
             _hud.CloseModals();
+
+            _hud.OpenDaily();
+            yield return new WaitForSecondsRealtime(0.5f);
+            yield return Shot(prefix + "_1d_gunluk.png");
+            _hud.CloseModals();
+
+            // Yeni mekanikler: gizli koliler (15) ve kilitli sütunlar (25)
+            _forceIntro = true;
+            StartLevel(15);
+            yield return new WaitForSecondsRealtime(2.2f);
+            yield return Shot(prefix + "_1e_gizli.png");
+            StartLevel(25);
+            yield return new WaitForSecondsRealtime(2.2f);
+            yield return Shot(prefix + "_1f_kilit.png");
+            _forceIntro = false;
+            int departedBefore = State.DepartedTrucks;
+            for (int i = 0; i < 60 && CurrentPhase == Phase.Playing && _hint.Valid && State.HasLocks; i++)
+            {
+                if (_hint.Kind == Tappable.TapKind.Column) HandleColumnTap(_hint.Index);
+                else HandleBufferTap(_hint.Index);
+                yield return new WaitForSecondsRealtime(0.12f);
+            }
+            Debug.Log($"[Test] kilit: giden kamyon {departedBefore} → {State.DepartedTrucks}, kilit kaldı mı: {State.HasLocks}, aşama {CurrentPhase}");
+            yield return new WaitForSecondsRealtime(0.3f);
+            yield return Shot(prefix + "_1g_kilit_acildi.png");
 
             _forceTutorial = true;
             StartLevel(1);
@@ -268,6 +316,7 @@ namespace HonkAndLoad.Gameplay
             Loc.Setting = savedLanguage;
             ShowMenu();
 
+            Sweeping = false;
             Debug.Log($"[HonkAndLoad] Ekran taraması bitti: {prefix}_*.png");
             UnityEditor.EditorApplication.isPlaying = false;
         }
@@ -338,7 +387,7 @@ namespace HonkAndLoad.Gameplay
             for (int c = 0; c < State.Columns.Count; c++)
             {
                 int f = State.FrontCrate(c);
-                if (f >= 0 && State.FindDockFor(f) >= 0) return c;
+                if (f >= 0 && !State.IsLocked(c) && State.FindDockFor(f) >= 0) return c;
             }
             return -1;
         }
@@ -350,7 +399,7 @@ namespace HonkAndLoad.Gameplay
             {
                 if (c == except) continue;
                 int f = State.FrontCrate(c);
-                if (f >= 0 && State.FindDockFor(f) >= 0) n++;
+                if (f >= 0 && !State.IsLocked(c) && State.FindDockFor(f) >= 0) n++;
             }
             return n;
         }
@@ -542,6 +591,7 @@ namespace HonkAndLoad.Gameplay
             // Önce aç: güçlendirici çubuğu görünürse kamera ona göre sığdırılsın
             var unlocked = VideoMode ? null : Economy.CheckUnlocks(LevelNumber);
             RestartLevel();
+            IntroText = VideoMode ? null : MechanicIntro();
             if (unlocked != null)
                 foreach (Economy.BoosterInfo b in unlocked)
                     _hud.Banner(Loc.F("Yeni: {0}!", b.Name), Loc.F("{0} tane hediye. {1}", Economy.UnlockGift, b.Description));
@@ -574,8 +624,31 @@ namespace HonkAndLoad.Gameplay
             StartLevel(LevelNumber + 1);
         }
 
+        /// <summary>Bölümde ilk kez görülen mekanik varsa kısa açıklama (bir kez gösterilir).</summary>
+        private string MechanicIntro()
+        {
+            bool hasHidden = false;
+            foreach (var h in State.Hidden) if (h.Contains(true)) { hasHidden = true; break; }
+            if (State.HasLocks && (Progress.GetInt("intro_lock") == 0 || _forceIntro))
+            {
+                if (!_forceIntro) Progress.SetInt("intro_lock", 1);
+                _hud.Banner(Loc.T("Yeni: Kilitli sütun!"), Loc.T("Sayı kadar kamyon gidince açılır"));
+                return Loc.T("Kilitli sütuna dokunamazsın. Üstündeki sayı kadar kamyon yola çıkınca kilit açılır!");
+            }
+            if (hasHidden && (Progress.GetInt("intro_hidden") == 0 || _forceIntro))
+            {
+                if (!_forceIntro) Progress.SetInt("intro_hidden", 1);
+                _hud.Banner(Loc.T("Yeni: Gizli koliler!"), Loc.T("Rengi, öne gelince görünür"));
+                return Loc.T("Gri koliler gizli: hangi renk olduğu, sütunun önüne gelince ortaya çıkar. Rafı dikkatli kullan!");
+            }
+            return null;
+        }
+
+        private bool _forceIntro;
+
         private void ResetGameEconomy()
         {
+            IntroText = null;
             _history.Clear();
             LastReward = 0;
             RewardBoosted = false;
@@ -717,6 +790,8 @@ namespace HonkAndLoad.Gameplay
             {
                 State.Columns[c].Clear();
                 State.Columns[c].AddRange(best.Columns[c]);
+                State.Hidden[c].Clear();
+                State.Hidden[c].AddRange(best.Hidden[c]);
             }
             _feedback.ResetCombo();
             _view.RebuildColumns();
@@ -804,7 +879,9 @@ namespace HonkAndLoad.Gameplay
                 _hud.Popup(Loc.F("x{0} Kombo!", e.ComboMilestone), _view.DockWorld(e.Dock), Palette.Warning, 0f);
             if (e.TierUp)
             {
-                _hud.Banner(Loc.F("Zorluk {0}!", e.NewTier + 1), Loc.T(e.NewTier % 2 == 0 ? "Yeni bir renk geldi!" : "Koliler daha karışık geliyor"));
+                string sub = e.NewTier == EndlessDirector.HiddenFromTier ? "Gizli koliler geliyor!"
+                    : e.NewTier % 2 == 0 ? "Yeni bir renk geldi!" : "Koliler daha karışık geliyor";
+                _hud.Banner(Loc.F("Zorluk {0}!", e.NewTier + 1), Loc.T(sub));
                 StartCoroutine(Delayed(0.2f, _feedback.TruckDeparts));
             }
             if (!VideoMode && !NewRecord && RecordAtStart > 0 && Endless.Score > RecordAtStart)
@@ -901,6 +978,7 @@ namespace HonkAndLoad.Gameplay
             {
                 _view.ShakeColumn(column);
                 _feedback.Invalid();
+                if (State.IsLocked(column)) _hud.Toast(Loc.F("Kilitli: {0} kamyon", State.LockRemaining(column)));
                 return;
             }
             if (before != null) { _history.Add(before); if (_history.Count > MaxHistory) _history.RemoveAt(0); }
@@ -924,7 +1002,13 @@ namespace HonkAndLoad.Gameplay
         private void AfterMove(MoveResult move, bool applyView = true, bool checkEnd = true)
         {
             Moves++;
+            IntroText = null;
             if (applyView) _view.Apply(move);
+            foreach (int opened in _view.RefreshLocks())
+            {
+                _hud.Popup(Loc.T("Açıldı!"), _view.ColumnFrontWorld(opened) + Vector3.up * 0.8f, Palette.Warning, 0.35f);
+                StartCoroutine(Delayed(0.35f, _feedback.Load));
+            }
             if (Mode == GameMode.Endless) AfterEndlessMove(move);
             if (move.ToDock >= 0)
             {
@@ -1022,7 +1106,7 @@ namespace HonkAndLoad.Gameplay
             for (int c = 0; c < State.Columns.Count; c++)
             {
                 int color = State.FrontCrate(c);
-                if (color >= 0 && State.FindDockFor(color) >= 0)
+                if (color >= 0 && !State.IsLocked(c) && State.FindDockFor(color) >= 0)
                 {
                     _hint = new Hint { Valid = true, Kind = Tappable.TapKind.Column, Index = c,
                         Text = Loc.T("Öndeki koliye dokun: aynı renkteki kamyona gider!") };

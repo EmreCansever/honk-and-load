@@ -39,7 +39,16 @@ namespace HonkAndLoad.Level
             /// olan seçilir. Düşük = zor. Dikkatsiz oyuncu bundan çok daha sık kaybeder.
             /// </summary>
             public float TargetWinRate;
+            /// <summary>Arkadaki kolilerin gizli (soru işaretli) olma olasılığı.</summary>
+            public float HiddenRatio;
+            /// <summary>Kilitli sütun sayısı ve en fazla kaç kamyon sonra açılacağı.</summary>
+            public int LockedColumns;
+            public int MaxLock;
         }
+
+        /// <summary>Yeni mekaniklerin geldiği bölümler.</summary>
+        public const int HiddenFromLevel = 15;
+        public const int LocksFromLevel = 25;
 
         public static Settings SettingsFor(int levelNumber)
         {
@@ -59,6 +68,15 @@ namespace HonkAndLoad.Level
             float target = Math.Max(0.45f, 0.95f - 0.015f * n);
             if (hard) target -= 0.2f;
             if (relief) target += 0.1f;
+            // Gizli koliler: 15. bölümde tanıtılır, yavaşça artar
+            float hiddenRatio = 0f;
+            if (n >= HiddenFromLevel)
+                hiddenRatio = n == HiddenFromLevel ? 0.25f : Math.Min(0.45f, 0.15f + 0.01f * (n - HiddenFromLevel));
+            // Kilitli sütunlar: 25. bölümde 1 sütun, 40'ta 2, 60'ta 3
+            int lockedColumns = n >= LocksFromLevel ? 1 + (n >= 40 ? 1 : 0) + (n >= 60 ? 1 : 0) : 0;
+            int maxLock = n >= 50 ? 3 : 2;
+            // Botlar gizli koliyi görür, oyuncu görmez: biraz daha kolay aday seç
+            if (hiddenRatio > 0f) target += 0.05f;
             target = Math.Min(1f, Math.Max(0.25f, target));
 
             return new Settings
@@ -70,7 +88,10 @@ namespace HonkAndLoad.Level
                 BufferSize = BufferSizeFor(n),
                 DockCount = 3,
                 Noise = noise,
-                TargetWinRate = target
+                TargetWinRate = target,
+                HiddenRatio = hiddenRatio,
+                LockedColumns = lockedColumns,
+                MaxLock = maxLock
             };
         }
 
@@ -145,6 +166,24 @@ namespace HonkAndLoad.Level
                     column = shortest;
                 }
                 data.columns[column].crates.Add(sequence[order[i]]);
+            }
+
+            // Gizli koliler (en öndekiler hariç). Önceki bölümler değişmesin diye rng yalnızca
+            // mekanik açıkken kullanılır.
+            if (s.HiddenRatio > 0f)
+                foreach (ColumnData col in data.columns)
+                    for (int i = 0; i < col.crates.Count - 1; i++)
+                        if (rng.NextDouble() < s.HiddenRatio) col.hidden.Add(i);
+
+            // Kilitli sütunlar: en az iki sütun hep açık kalır
+            if (s.LockedColumns > 0)
+            {
+                int count = Math.Min(s.LockedColumns, data.columns.Count - 2);
+                for (int i = 0; i < data.columns.Count; i++) data.locks.Add(0);
+                var candidates = new List<int>();
+                for (int i = 0; i < data.columns.Count; i++) candidates.Add(i);
+                Shuffle(candidates, rng);
+                for (int i = 0; i < count; i++) data.locks[candidates[i]] = 1 + rng.Next(s.MaxLock);
             }
 
             return data;

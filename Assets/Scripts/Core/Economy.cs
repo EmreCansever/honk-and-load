@@ -107,6 +107,57 @@ namespace HonkAndLoad.Core
             return true;
         }
 
+        // ---------- Günlük ödül (7 günlük seri) ----------
+
+        public struct DailyReward
+        {
+            public int Coins;
+            public int Booster; // -1 = yok, yoksa BoosterType
+        }
+
+        /// <summary>Gün gün ödüller. Bir gün atlanırsa seri 1. günden başlar; 7. günden sonra döner.</summary>
+        public static readonly DailyReward[] DailyRewards =
+        {
+            new DailyReward { Coins = 50, Booster = -1 },
+            new DailyReward { Coins = 75, Booster = -1 },
+            new DailyReward { Coins = 100, Booster = (int)BoosterType.Undo },
+            new DailyReward { Coins = 125, Booster = -1 },
+            new DailyReward { Coins = 150, Booster = (int)BoosterType.Magnet },
+            new DailyReward { Coins = 200, Booster = -1 },
+            new DailyReward { Coins = 300, Booster = (int)BoosterType.Shuffle },
+        };
+
+        private static string Yesterday => System.DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd");
+
+        /// <summary>Bugünün ödülü alınabilir mi?</summary>
+        public static bool DailyAvailable => Progress.GetString("daily_last") != Today;
+
+        /// <summary>Takvimde vurgulanacak gün (0–6): alınabilirse bugünkü, değilse son alınan.</summary>
+        public static int DailyDayIndex
+        {
+            get
+            {
+                int streak = Progress.GetInt("daily_streak");
+                string last = Progress.GetString("daily_last");
+                if (last == Today) return (streak - 1 + 7) % 7;
+                if (last == Yesterday) return streak % 7;
+                return 0;
+            }
+        }
+
+        /// <summary>Bugünün ödülünü verir; doubled = reklam izlendi (altın 2 katı). Verilen ödülü döndürür.</summary>
+        public static DailyReward ClaimDaily(bool doubled)
+        {
+            int day = DailyDayIndex;
+            DailyReward r = DailyRewards[day];
+            int streak = Progress.GetString("daily_last") == Yesterday ? Progress.GetInt("daily_streak") + 1 : 1;
+            Progress.SetInt("daily_streak", streak);
+            Progress.SetString("daily_last", Today);
+            AddCoins(doubled ? r.Coins * 2 : r.Coins);
+            if (r.Booster >= 0) AddBooster((BoosterType)r.Booster, 1);
+            return r;
+        }
+
         // ---------- Reklamla ücretsiz altın (günlük sınır) ----------
 
         private static string Today => System.DateTime.Now.ToString("yyyy-MM-dd");

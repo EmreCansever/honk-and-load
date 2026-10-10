@@ -58,7 +58,7 @@ namespace HonkAndLoad.Level
             // Her sütunun ön kolisini rafa koymayı dene.
             for (int c = 0; c < state.Columns.Count; c++)
             {
-                if (state.FrontCrate(c) < 0) continue;
+                if (!state.CanTapColumn(c)) continue;
                 BoardState next = state.Clone();
                 next.TapColumn(c);
                 if (next.Lost) continue; // bu hamle rafı doldurur
@@ -80,8 +80,9 @@ namespace HonkAndLoad.Level
                 }
                 for (int c = 0; c < state.Columns.Count; c++)
                 {
+                    if (!state.CanTapColumn(c)) continue;
                     int color = state.FrontCrate(c);
-                    if (color >= 0 && state.FindDockFor(color) >= 0) { state.TapColumn(c); changed = true; }
+                    if (state.FindDockFor(color) >= 0) { state.TapColumn(c); changed = true; }
                 }
             }
         }

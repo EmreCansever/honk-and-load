@@ -72,6 +72,8 @@ namespace HonkAndLoad.UI
         public static bool ModalOpen;
         private bool _settingsOpen;
         private Texture2D _gearTex;
+        private bool _dailyOpen, _dailyAutoShown;
+        private Texture2D _giftTex, _checkTex;
         public const float BoosterBarHeight = 180f;
         private bool _shopOpen;
         private int _buyDialog = -1;
@@ -234,6 +236,8 @@ namespace HonkAndLoad.UI
             _adTex = _ui.AdIcon();
             _plusTex = _ui.Plus();
             _gearTex = _ui.Gear();
+            _giftTex = _ui.Gift();
+            _checkTex = _ui.Check();
             _boosterIcons = new[] { _ui.Undo(), _ui.Magnet(), _ui.Shuffle(), _ui.Plus() };
             _whiteRound = _ui.RoundedFlat(Color.white, 96, 30);
             _darkRound = _ui.RoundedFlat(new Color(0.05f, 0.08f, 0.2f, 0.45f), 96, 30);
@@ -378,6 +382,13 @@ namespace HonkAndLoad.UI
 
         private void Update()
         {
+            // Günün ilk menü açılışında günlük ödül penceresi kendiliğinden açılır
+            if (!_dailyAutoShown && _game != null && _game.CurrentPhase == GameController.Phase.Menu
+                && !_game.VideoMode && !_game.Sweeping && Economy.DailyAvailable)
+            {
+                _dailyAutoShown = true;
+                _dailyOpen = true;
+            }
             for (int i = _popups.Count - 1; i >= 0; i--)
             {
                 PopupText p = _popups[i];
@@ -623,14 +634,20 @@ namespace HonkAndLoad.UI
 
             AdService ads = AdService.Instance;
             bool adShowing = ads != null && ads.IsShowing;
-            ModalOpen = _shopOpen || _settingsOpen || _buyDialog >= 0 || adShowing;
+            ModalOpen = _shopOpen || _settingsOpen || _dailyOpen || _buyDialog >= 0 || adShowing;
 
             if (_game.CurrentPhase == GameController.Phase.Menu)
             {
                 GUI.enabled = !adShowing;
                 if (_shopOpen) DrawShop(w, h);
                 else if (_settingsOpen) DrawSettings(w, h);
-                else DrawMenu(w, h);
+                else
+                {
+                    GUI.enabled = !adShowing && !_dailyOpen;
+                    DrawMenu(w, h);
+                    GUI.enabled = !adShowing;
+                    if (_dailyOpen) DrawDaily(w, h);
+                }
                 GUI.enabled = true;
                 DrawOverlays(w, h, adShowing);
                 return;
@@ -647,7 +664,9 @@ namespace HonkAndLoad.UI
             GUI.enabled = !ModalOpen;
             float inset = SafeTopInsetPixels() / _scale;
             DrawTopBar(w, inset);
+            DrawLockBadges();
             DrawHint(w, h);
+            DrawIntro(w, h);
             if (_game.CurrentPhase == GameController.Phase.Playing && BoosterBarVisible(_game)) DrawBoosterBar(w, h);
             DrawPopups();
             DrawBanner(w, h);
@@ -688,6 +707,7 @@ namespace HonkAndLoad.UI
             float rowY = SafeTopInsetPixels() / _scale + 30f;
             if (CoinPill(new Rect(40, rowY, 300, 96))) OpenShop();
             if (MarketButton(new Rect(w - 40 - 290, rowY, 290, 96))) OpenShop();
+            if (GiftButton(new Rect(w - 40 - 290 - 24 - 96, rowY, 96, 96))) _dailyOpen = true;
 
             // Başlık
             float titleY = Mathf.Max(SafeTopInsetPixels() / _scale + 150f, h * 0.09f);

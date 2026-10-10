@@ -266,6 +266,22 @@ namespace HonkAndLoad.UI
             return body || shackle;
         });
 
+        /// <summary>Hediye kutusu (günlük ödül).</summary>
+        public Texture2D Gift() => Icon(128, (u, v) =>
+        {
+            bool box = Mathf.Abs(u) < 0.7f && v > -0.85f && v < 0.15f;
+            bool lid = Mathf.Abs(u) < 0.82f && v >= 0.15f && v < 0.42f;
+            bool ribbonGap = Mathf.Abs(u) < 0.1f && v > -0.85f && v < 0.42f;
+            bool lidGap = v > 0.12f && v < 0.18f && Mathf.Abs(u) < 0.82f;
+            float l = Seg(u, v, -0.05f, 0.45f, -0.45f, 0.82f), r = Seg(u, v, 0.05f, 0.45f, 0.45f, 0.82f);
+            bool bow = (l < 0.13f || r < 0.13f);
+            return ((box || lid) && !ribbonGap && !lidGap) || bow;
+        });
+
+        /// <summary>Onay işareti.</summary>
+        public Texture2D Check() => Icon(96, (u, v) =>
+            Seg(u, v, -0.6f, 0f, -0.15f, -0.45f) < 0.16f || Seg(u, v, -0.15f, -0.45f, 0.65f, 0.45f) < 0.16f);
+
         /// <summary>Ayarlar: dişli çark.</summary>
         public Texture2D Gear() => Icon(128, (u, v) =>
         {

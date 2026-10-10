@@ -82,18 +82,70 @@ namespace HonkAndLoad.Gameplay
             return crate.transform;
         }
 
-        /// <summary>Arkadaki (henüz alınamayan) kolileri soluk göster.</summary>
+        /// <summary>Gizli kolinin rengi (renklerden ayrışan nötr gri).</summary>
+        public static readonly Color HiddenColor = new Color(0.62f, 0.64f, 0.7f);
+
+        /// <summary>Arkadaki (henüz alınamayan) kolileri soluk göster; gizli koliler gri ve "?".</summary>
         public void SetCrateDimmed(Transform crate, bool dimmed)
         {
             var info = crate.GetComponent<CrateInfo>();
-            if (info == null || info.Dimmed == dimmed) return;
+            if (info == null) return;
+            bool hidden = info.Hidden && dimmed;
+            if (info.Dimmed == dimmed && info.ShowingHidden == hidden) return;
             info.Dimmed = dimmed;
-            Color c = Palette.Crate(info.Color);
+            info.ShowingHidden = hidden;
+            Color c = hidden ? HiddenColor : Palette.Crate(info.Color);
             // Rengi beyaza değil koyuya doğru kaydır: ton korunur, renkler karışmaz
             Paint(crate.gameObject, dimmed ? Color.Lerp(c, new Color(0.25f, 0.25f, 0.3f), 0.3f) : c);
+            Transform tape = crate.Find("Tape");
+            if (tape != null) Paint(tape.gameObject, Color.Lerp(c, Color.white, 0.35f));
             Transform symbol = crate.Find("Symbol");
             if (symbol != null)
-                symbol.GetComponent<SpriteRenderer>().color = new Color(1f, 1f, 1f, dimmed ? 0.6f : 0.92f);
+            {
+                var sr = symbol.GetComponent<SpriteRenderer>();
+                sr.sprite = hidden ? Question() : Symbol(info.Color);
+                sr.color = new Color(1f, 1f, 1f, hidden ? 0.95f : dimmed ? 0.6f : 0.92f);
+            }
+        }
+
+        private Sprite _question;
+
+        /// <summary>Gizli koli sembolü: soru işareti.</summary>
+        private Sprite Question()
+        {
+            if (_question != null) return _question;
+            const int size = 64;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear };
+            var pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    int hits = 0;
+                    for (int sy = 0; sy < 3; sy++)
+                        for (int sx = 0; sx < 3; sx++)
+                        {
+                            float u = ((x + (sx + 0.5f) / 3f) / size) * 2f - 1f;
+                            float v = ((y + (sy + 0.5f) / 3f) / size) * 2f - 1f;
+                            if (InsideQuestion(u, v)) hits++;
+                        }
+                    pixels[y * size + x] = new Color32(255, 255, 255, (byte)(255 * hits / 9));
+                }
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            _question = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
+            return _question;
+        }
+
+        private static bool InsideQuestion(float u, float v)
+        {
+            // Üstte kanca (yay), ortada sap, altta nokta
+            float cx = 0f, cy = 0.38f;
+            float r = Mathf.Sqrt((u - cx) * (u - cx) + (v - cy) * (v - cy));
+            float ang = Mathf.Atan2(v - cy, u - cx) * Mathf.Rad2Deg;
+            bool hook = r > 0.22f && r < 0.46f && (ang > -95f || ang < -175f);
+            bool stem = Mathf.Abs(u) < 0.12f && v > -0.35f && v < 0.08f;
+            bool dot = u * u + (v + 0.66f) * (v + 0.66f) < 0.15f * 0.15f;
+            return hook || stem || dot;
         }
 
         // ---------- Kamyon ----------

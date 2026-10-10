@@ -187,6 +187,29 @@ namespace HonkAndLoad.Core
             { "Test reklamı", "Test ad" },
             { "Gerçek reklamlar AdMob bağlanınca gelecek", "Real ads will come once AdMob is connected" },
 
+            // Yeni mekanikler
+            { "Yeni: Kilitli sütun!", "New: Locked column!" },
+            { "Sayı kadar kamyon gidince açılır", "Opens after that many trucks leave" },
+            { "Kilitli sütuna dokunamazsın. Üstündeki sayı kadar kamyon yola çıkınca kilit açılır!",
+              "You can't tap a locked column. It opens once as many trucks as its number have left!" },
+            { "Yeni: Gizli koliler!", "New: Hidden crates!" },
+            { "Rengi, öne gelince görünür", "Its color shows when it reaches the front" },
+            { "Gri koliler gizli: hangi renk olduğu, sütunun önüne gelince ortaya çıkar. Rafı dikkatli kullan!",
+              "Gray crates are hidden: their color is revealed when they reach the front. Use the shelf carefully!" },
+            { "Açıldı!", "Unlocked!" },
+            { "Kilitli: {0} kamyon", "Locked: {0} trucks" },
+            { "Gizli koliler geliyor!", "Hidden crates incoming!" },
+
+            // Günlük ödül
+            { "Günlük Ödül", "Daily Reward" },
+            { "Her gün gel, ödül büyüsün!", "Come back every day for bigger rewards!" },
+            { "Gün {0}", "Day {0}" },
+            { "Al", "Claim" },
+            { "Reklam izle: 2 katı", "Watch ad: 2x" },
+            { "Yarın yine gel!", "Come back tomorrow!" },
+            { "Bugünün ödülü alındı", "Today's reward claimed" },
+            { "Bir gün kaçırırsan seri baştan başlar", "Miss a day and the streak restarts" },
+
             // Reklam videosu
             { "Rekorumu\ngeçebilir misin?", "Can you beat\nmy score?" },
             { "Raf dolarsa\nkaybedersin!", "If the shelf fills,\nyou lose!" },

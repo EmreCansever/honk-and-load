@@ -52,6 +52,10 @@ namespace HonkAndLoad.Gameplay
         public int ColorCount => Math.Min(LevelGenerator.MaxColors, 5 + Tier / 2);
         public float Noise => Math.Min(120f, 10f + 8f * Tier);
 
+        /// <summary>Gizli koliler bu kademeden itibaren gelir (ekranda "Zorluk 4").</summary>
+        public const int HiddenFromTier = 3;
+        public float HiddenChance => Tier < HiddenFromTier ? 0f : Math.Min(0.35f, 0.1f * (Tier - HiddenFromTier + 1));
+
         public static int TierStart(int tier)
         {
             if (tier < TierThresholds.Length) return TierThresholds[tier];
@@ -144,7 +148,9 @@ namespace HonkAndLoad.Gameplay
             var board = new BoardState(data)
             {
                 Refill = _ => DrawCrate(),
-                TruckSupplier = NextTruckColor
+                TruckSupplier = NextTruckColor,
+                // Kademe düşükken rng hiç kullanılmaz: eski tohumlu reklam videoları aynı kalır
+                RefillHidden = () => Tier >= HiddenFromTier && _rng.NextDouble() < HiddenChance
             };
             return board;
         }
